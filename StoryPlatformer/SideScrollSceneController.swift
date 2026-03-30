@@ -67,6 +67,8 @@ final class SideScrollSceneController {
 
     private static let capsuleHeight: Float = 1.15
     private static let capsuleRadius: Float = 0.32
+    /// Matches `PhysicsBodyComponent` mass in `buildPlayer()`; used for impulse = mass × Δv.
+    private static let playerMass: Float = 70
 
     /// Ladder volume (hand-tuned to match `ladderVisual`).
     private let climbRegion = AxisAlignedRegion(
@@ -532,10 +534,11 @@ final class SideScrollSceneController {
         let shape = ShapeResource.generateCapsule(height: h, radius: r)
         player.components.set(CollisionComponent(shapes: [shape], mode: .default))
         player.components.set(PhysicsBodyComponent(
-            massProperties: .init(shape: shape, mass: 70),
+            massProperties: .init(shape: shape, mass: Self.playerMass),
             material: .default,
             mode: .dynamic
         ))
+        player.components.set(PhysicsMotionComponent())
     }
 
     private func resetPlayerAtSpawn(_ center: SIMD3<Float>, viewModel: GameSessionViewModel) {
@@ -573,33 +576,41 @@ final class SideScrollSceneController {
 
     private func applyMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
         let runSpeed: Float = 5
-        var v = player.components[PhysicsMotionComponent.self]?.linearVelocity ?? .zero
-        let targetVx = viewModel.horizontalInput * runSpeed
         let accel: Float = 18
-        v.x += (targetVx - v.x) * min(1, accel * deltaTime)
-        v.z *= max(0, 1 - 6 * deltaTime)
-
-        if var motion = player.components[PhysicsMotionComponent.self] {
-            motion.linearVelocity = SIMD3<Float>(v.x, motion.linearVelocity.y, v.z)
-            player.components.set(motion)
-        }
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let v = motion.linearVelocity
+        let targetVx = viewModel.horizontalInput * runSpeed
+        let t = min(1, accel * deltaTime)
+        let deltaVx = (targetVx - v.x) * t
+        let zScale = max(0, 1 - 6 * deltaTime)
+        let deltaVz = v.z * (zScale - 1)
+        player.applyLinearImpulse(
+            SIMD3<Float>(Self.playerMass * deltaVx, 0, Self.playerMass * deltaVz),
+            relativeTo: nil
+        )
     }
 
     private func applyClimbingMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
         let climbSpeed: Float = 3.35
         let slideDown: Float = viewModel.verticalInput == 0 ? -0.95 : 0
-        let vy = viewModel.verticalInput * climbSpeed + slideDown
+        let targetVy = viewModel.verticalInput * climbSpeed + slideDown
         let targetVx = viewModel.horizontalInput * 2.1
 
-        var v = player.components[PhysicsMotionComponent.self]?.linearVelocity ?? .zero
-        v.x += (targetVx - v.x) * min(1, 14 * deltaTime)
-        v.y = vy
-        v.z += (0 - v.z) * min(1, 14 * deltaTime)
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let v = motion.linearVelocity
+        let t = min(1, 14 * deltaTime)
+        let deltaVx = (targetVx - v.x) * t
+        let deltaVy = targetVy - v.y
+        let deltaVz = (0 - v.z) * t
 
-        if var motion = player.components[PhysicsMotionComponent.self] {
-            motion.linearVelocity = SIMD3<Float>(v.x, v.y, v.z)
-            player.components.set(motion)
-        }
+        player.applyLinearImpulse(
+            SIMD3<Float>(
+                Self.playerMass * deltaVx,
+                Self.playerMass * deltaVy,
+                Self.playerMass * deltaVz
+            ),
+            relativeTo: nil
+        )
 
         let ladderX: Float = 4
         var p = player.position
@@ -609,12 +620,11 @@ final class SideScrollSceneController {
     }
 
     private func lockPlayPlane(deltaTime: Float) {
-        var v = player.components[PhysicsMotionComponent.self]?.linearVelocity ?? .zero
-        v.z *= max(0, 1 - 8 * deltaTime)
-        if var motion = player.components[PhysicsMotionComponent.self] {
-            motion.linearVelocity = SIMD3<Float>(v.x, v.y, v.z)
-            player.components.set(motion)
-        }
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let v = motion.linearVelocity
+        let zScale = max(0, 1 - 8 * deltaTime)
+        let deltaVz = v.z * (zScale - 1)
+        player.applyLinearImpulse(SIMD3<Float>(0, 0, Self.playerMass * deltaVz), relativeTo: nil)
 
         if abs(player.position.z) > 0.06 {
             var p = player.position
@@ -699,20 +709,23 @@ final class SideScrollSceneController {
         guard viewModel.jumpRequested else { return }
         viewModel.jumpRequested = false
 
-        guard var motion = player.components[PhysicsMotionComponent.self] else { return }
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let v = motion.linearVelocity
 
         if climbing {
-            motion.linearVelocity.y = max(motion.linearVelocity.y, 4.4)
-            motion.linearVelocity.x += 2.0
-            player.components.set(motion)
+            let deltaVy = max(0, 4.4 - v.y)
+            player.applyLinearImpulse(
+                SIMD3<Float>(Self.playerMass * 2, Self.playerMass * deltaVy, 0),
+                relativeTo: nil
+            )
             return
         }
 
         guard grounded else { return }
-        if motion.linearVelocity.y > 0.35 { return }
+        if v.y > 0.35 { return }
 
-        motion.linearVelocity.y = 6.2
-        player.components.set(motion)
+        let deltaVy = 6.2 - v.y
+        player.applyLinearImpulse(SIMD3<Float>(0, Self.playerMass * deltaVy, 0), relativeTo: nil)
     }
 
     private func processInteract(viewModel: GameSessionViewModel) {
@@ -770,10 +783,10 @@ final class SideScrollSceneController {
         hazardCooldownRemaining = 1.15
         viewModel.flashInteractMessage("Live bus bar on the floor — jump clear or use the ladder.")
 
-        if var motion = player.components[PhysicsMotionComponent.self] {
-            motion.linearVelocity.x -= 4.2
-            motion.linearVelocity.y = max(motion.linearVelocity.y, 2.6)
-            player.components.set(motion)
+        if let motion = player.components[PhysicsMotionComponent.self] {
+            let v = motion.linearVelocity
+            let deltaVy = max(0, 2.6 - v.y)
+            player.applyLinearImpulse(SIMD3<Float>(Self.playerMass * (-4.2), Self.playerMass * deltaVy, 0), relativeTo: nil)
         }
     }
 
