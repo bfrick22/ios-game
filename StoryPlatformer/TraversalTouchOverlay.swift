@@ -15,6 +15,7 @@ struct TraversalTouchOverlay: View {
                         .padding(.bottom, 8 + safe.bottom * 0.25)
 
                     Spacer(minLength: 0)
+                        .allowsHitTesting(false)
 
                     VStack(spacing: 14) {
                         interactButton
@@ -25,15 +26,18 @@ struct TraversalTouchOverlay: View {
                     .padding(.bottom, 12 + safe.bottom)
                 }
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(true)
     }
 
     private var virtualStick: some View {
-        ZStack {
+        ZStack(alignment: .center) {
             Circle()
                 .fill(.ultraThinMaterial)
                 .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                .frame(width: 140, height: 140)
             Circle()
                 .fill(Color.accentColor.opacity(0.55))
                 .frame(width: 56, height: 56)

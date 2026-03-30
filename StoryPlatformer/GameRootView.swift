@@ -1,3 +1,4 @@
+import Combine
 import RealityKit
 import SwiftUI
 
@@ -10,7 +11,7 @@ struct GameRootView: View {
     @State private var showChapterIntro = true
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack {
             RealityView { content in
                 sceneController.attachIfNeeded(
                     insertRoot: { content.add($0) },
@@ -20,10 +21,20 @@ struct GameRootView: View {
                 content.camera = .virtual
                 content.cameraTarget = sceneController.perspectiveCamera
             } update: { _ in
-                sceneController.tick(viewModel: viewModel)
+                // Do not run gameplay tick here: `update` only runs when SwiftUI invalidates this view,
+                // so physics/camera would freeze between input changes. The timer below drives simulation.
             }
+            // RealityKit’s embedded view otherwise wins hit testing; controls must sit above and receive touches.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+
+            // Below traversal so the stick and action buttons receive touches; inventory sits under transparent regions.
+            InventoryHUDView(viewModel: viewModel)
+                .padding(.bottom, 96)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
             TraversalTouchOverlay(viewModel: viewModel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if showChapterIntro {
                 chapterIntroOverlay
@@ -44,13 +55,13 @@ struct GameRootView: View {
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding()
             .allowsHitTesting(false)
         }
-        .overlay(alignment: .bottom) {
-            InventoryHUDView(viewModel: viewModel)
-                .padding(.bottom, 96)
+        .onReceive(Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()) { _ in
+            guard !showChapterIntro else { return }
+            sceneController.tick(viewModel: viewModel)
         }
         .sheet(isPresented: $viewModel.showCraftingSheet) {
             CraftingSheetView(viewModel: viewModel)
