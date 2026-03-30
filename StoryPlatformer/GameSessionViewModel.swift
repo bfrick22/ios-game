@@ -82,10 +82,6 @@ final class GameSessionViewModel {
         completedStoryBeatIds.insert(storyBeatId)
     }
 
-    func hasCompletedStoryBeat(_ storyBeatId: String) -> Bool {
-        completedStoryBeatIds.contains(storyBeatId)
-    }
-
     func countItem(_ itemId: String) -> Int {
         inventorySlots.compactMap { $0 }.filter { $0.itemId == itemId }.reduce(0) { $0 + $1.quantity }
     }

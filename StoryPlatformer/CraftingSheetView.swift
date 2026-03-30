@@ -3,7 +3,6 @@ import SwiftUI
 /// Simple whitelist crafting UI — no tech tree or material farming.
 struct CraftingSheetView: View {
     @Bindable var viewModel: GameSessionViewModel
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -26,7 +25,6 @@ struct CraftingSheetView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         viewModel.showCraftingSheet = false
-                        dismiss()
                     }
                 }
             }
@@ -44,7 +42,7 @@ struct CraftingSheetView: View {
                 Spacer()
                 Text(status)
                     .font(.caption2)
-                    .foregroundStyle(ready ? .secondary : .orange)
+                    .foregroundStyle(ready ? Color.secondary : Color.orange)
             }
             Text(ingredientSummary(recipe))
                 .font(.caption2)
