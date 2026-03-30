@@ -12,6 +12,16 @@ private struct AxisAlignedRegion {
     }
 }
 
+private struct EnemyRuntime {
+    let configId: String
+    let entity: ModelEntity
+    var health: Float
+    let patrolMinX: Float
+    let patrolMaxX: Float
+    var velocitySign: Float
+    let speed: Float
+}
+
 /// Owns RealityKit entities, physics, and the side-scroll camera for one loaded segment.
 @MainActor
 final class SideScrollSceneController {
@@ -26,9 +36,16 @@ final class SideScrollSceneController {
     private let workstationProp = ModelEntity()
     private let hazardStrip = ModelEntity()
     private let completionMarker = ModelEntity()
+    private let tripwireVisual = ModelEntity()
     private var cameraRig = SideScrollCameraRig()
     private var lastMediaTime: CFTimeInterval?
     private var didAttach = false
+
+    private var enemyRuntimes: [EnemyRuntime] = []
+    private var tripwireArmed = false
+    private var tripwireRegion: AxisAlignedRegion?
+    private var meleeCooldownRemaining: Float = 0
+    private var hostileContactCooldown: Float = 0
 
     private var loadedChapter: ChapterConfig?
     private var loadedWorkstations: [CraftingWorkstationConfig] = []
@@ -69,12 +86,14 @@ final class SideScrollSceneController {
         buildCompletionMarkerPlaceholder()
         buildInteractProp()
         buildWorkstationProp()
+        buildTripwireVisualPlaceholder()
         buildPlayer()
 
         root.addChild(ground)
         root.addChild(ladderVisual)
         root.addChild(hazardStrip)
         root.addChild(completionMarker)
+        root.addChild(tripwireVisual)
         root.addChild(interactProp)
         root.addChild(workstationProp)
         root.addChild(player)
@@ -128,6 +147,8 @@ final class SideScrollSceneController {
             workstationProp.isEnabled = false
         }
 
+        rebuildCombat(from: chapter)
+
         resetPlayerAtSpawn(chapter.playerSpawn.simd)
     }
 
@@ -157,12 +178,25 @@ final class SideScrollSceneController {
         let grounded = computeGrounded()
         viewModel.isGrounded = grounded
 
+        updateFacing(viewModel: viewModel)
+
         if hazardCooldownRemaining > 0 {
             hazardCooldownRemaining = max(0, hazardCooldownRemaining - deltaTime)
         }
+        if meleeCooldownRemaining > 0 {
+            meleeCooldownRemaining = max(0, meleeCooldownRemaining - deltaTime)
+        }
+        if hostileContactCooldown > 0 {
+            hostileContactCooldown = max(0, hostileContactCooldown - deltaTime)
+        }
+
         processHazard(viewModel: viewModel)
+        updateEnemyPatrol(deltaTime: deltaTime)
+        processTripwireTrigger(viewModel: viewModel)
         updateInteractPrompt(viewModel: viewModel)
         applyJumpIfNeeded(viewModel: viewModel, climbing: climbing, grounded: grounded)
+        processMeleeAttack(viewModel: viewModel, grounded: grounded, climbing: climbing)
+        processHostileContact(viewModel: viewModel)
         processInteract(viewModel: viewModel)
         processChapterCompletion(viewModel: viewModel)
 
@@ -259,6 +293,185 @@ final class SideScrollSceneController {
         )
         workstationProp.position = .zero
         workstationProp.isEnabled = false
+    }
+
+    private func buildTripwireVisualPlaceholder() {
+        tripwireVisual.name = "trap.tripwire_visual"
+        tripwireVisual.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3<Float>(0.28, 0.04, 0.04)),
+            materials: [SimpleMaterial(color: UIColor(white: 0.25, alpha: 0.85), isMetallic: false)]
+        )
+        tripwireVisual.position = .zero
+        tripwireVisual.isEnabled = false
+    }
+
+    private func configureTripwireVisual(boundsMin: SIMD3<Float>, boundsMax: SIMD3<Float>) {
+        let ext = boundsMax - boundsMin
+        let center = (boundsMin + boundsMax) * 0.5
+        tripwireVisual.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3<Float>(
+                Swift.max(ext.x, 0.08),
+                Swift.max(ext.y * 0.12, 0.04),
+                Swift.max(ext.z, 0.08)
+            )),
+            materials: [SimpleMaterial(color: UIColor(white: 0.32, alpha: 0.55), isMetallic: false)]
+        )
+        tripwireVisual.position = center
+    }
+
+    private func rebuildCombat(from chapter: ChapterConfig) {
+        for er in enemyRuntimes {
+            er.entity.removeFromParent()
+        }
+        enemyRuntimes.removeAll()
+        tripwireArmed = false
+        tripwireRegion = nil
+        tripwireVisual.isEnabled = false
+
+        if let tw = chapter.tripwire {
+            tripwireRegion = AxisAlignedRegion(min: tw.triggerVolume.min.simd, max: tw.triggerVolume.max.simd)
+            configureTripwireVisual(boundsMin: tw.triggerVolume.min.simd, boundsMax: tw.triggerVolume.max.simd)
+        }
+
+        if let enemies = chapter.combatEnemies {
+            for e in enemies {
+                appendEnemy(from: e)
+            }
+        }
+    }
+
+    private func appendEnemy(from config: CombatEnemyConfig) {
+        let w: Float = 0.46
+        let h: Float = 0.94
+        let ent = ModelEntity()
+        ent.name = "Hostile.\(config.id)"
+        ent.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3<Float>(w, h, w * 0.82)),
+            materials: [SimpleMaterial(color: UIColor(red: 0.42, green: 0.2, blue: 0.16, alpha: 1), isMetallic: false)]
+        )
+        let base = config.worldPosition.simd
+        ent.position = base
+        let patrolMin = base.x - config.patrolHalfWidth
+        let patrolMax = base.x + config.patrolHalfWidth
+        let er = EnemyRuntime(
+            configId: config.id,
+            entity: ent,
+            health: config.maxHealth,
+            patrolMinX: patrolMin,
+            patrolMaxX: patrolMax,
+            velocitySign: 1,
+            speed: config.moveSpeed
+        )
+        enemyRuntimes.append(er)
+        root.addChild(ent)
+    }
+
+    private func updateFacing(viewModel: GameSessionViewModel) {
+        if abs(viewModel.horizontalInput) > 0.12 {
+            viewModel.facingSign = viewModel.horizontalInput > 0 ? 1 : -1
+        }
+    }
+
+    private func updateEnemyPatrol(deltaTime: Float) {
+        for i in enemyRuntimes.indices {
+            guard enemyRuntimes[i].health > 0 else { continue }
+            var x = enemyRuntimes[i].entity.position.x
+            x += enemyRuntimes[i].velocitySign * enemyRuntimes[i].speed * deltaTime
+            if x >= enemyRuntimes[i].patrolMaxX {
+                enemyRuntimes[i].velocitySign = -1
+                x = enemyRuntimes[i].patrolMaxX
+            } else if x <= enemyRuntimes[i].patrolMinX {
+                enemyRuntimes[i].velocitySign = 1
+                x = enemyRuntimes[i].patrolMinX
+            }
+            enemyRuntimes[i].entity.position.x = x
+        }
+    }
+
+    private func processTripwireTrigger(viewModel: GameSessionViewModel) {
+        guard tripwireArmed, let region = tripwireRegion else { return }
+        for i in enemyRuntimes.indices {
+            guard enemyRuntimes[i].health > 0 else { continue }
+            guard region.contains(enemyRuntimes[i].entity.position) else { continue }
+
+            let tripDamage: Float = 0.46
+            enemyRuntimes[i].health -= tripDamage
+            tripwireArmed = false
+            tripwireVisual.isEnabled = false
+
+            if enemyRuntimes[i].health <= 0 {
+                enemyRuntimes[i].entity.isEnabled = false
+                viewModel.flashInteractMessage("Tripwire — down.")
+            } else {
+                viewModel.flashInteractMessage("Tripwire — tangled.")
+            }
+            break
+        }
+    }
+
+    private func processMeleeAttack(viewModel: GameSessionViewModel, grounded: Bool, climbing: Bool) {
+        guard viewModel.attackRequested else { return }
+        viewModel.attackRequested = false
+        guard grounded, !climbing else { return }
+        guard meleeCooldownRemaining <= 0 else { return }
+
+        meleeCooldownRemaining = 0.45
+        let dmg = MeleeCombat.strikeDamage(equippedWeaponItemId: viewModel.equippedWeaponItemId)
+        let p = player.position
+        let sign = viewModel.facingSign
+
+        var hit = false
+        for i in enemyRuntimes.indices {
+            guard enemyRuntimes[i].health > 0 else { continue }
+            let e = enemyRuntimes[i].entity.position
+            guard enemyInMeleeArc(player: p, facingSign: sign, enemy: e) else { continue }
+            enemyRuntimes[i].health -= dmg
+            hit = true
+            if enemyRuntimes[i].health <= 0 {
+                enemyRuntimes[i].entity.isEnabled = false
+                viewModel.flashInteractMessage("Hostile down.")
+            } else {
+                viewModel.flashInteractMessage("Solid hit.")
+            }
+            break
+        }
+        if !hit {
+            viewModel.flashInteractMessage("Swing.")
+        }
+    }
+
+    private func enemyInMeleeArc(player: SIMD3<Float>, facingSign: Float, enemy: SIMD3<Float>) -> Bool {
+        let dx = enemy.x - player.x
+        let dz = abs(enemy.z - player.z)
+        let dy = abs(enemy.y - player.y)
+        if dz > 0.52 || dy > 0.9 { return false }
+        let forward = facingSign * dx
+        return forward > 0.22 && forward < 1.12
+    }
+
+    private func processHostileContact(viewModel: GameSessionViewModel) {
+        guard hostileContactCooldown <= 0 else { return }
+        let p = player.position
+        for er in enemyRuntimes {
+            guard er.health > 0 else { continue }
+            let e = er.entity.position
+            let dx = p.x - e.x
+            let dz = p.z - e.z
+            if dx * dx + dz * dz < 0.5 * 0.5 {
+                viewModel.applyDamageFromHostile(normalizedAmount: 0.09)
+                hostileContactCooldown = 0.55
+                viewModel.flashInteractMessage("Too close.")
+                return
+            }
+        }
+    }
+
+    private func withinInteractReach(player: SIMD3<Float>, target: SIMD3<Float>) -> Bool {
+        let offsetX = player.x - target.x
+        let dz = abs(player.z - target.z)
+        let dy = abs(player.y - target.y)
+        let inFrontBand = offsetX <= 0.55 && offsetX >= -interactReachX
+        return inFrontBand && dz < interactReachZ && dy < interactReachY
     }
 
     private func buildPlayer() {
@@ -403,17 +616,18 @@ final class SideScrollSceneController {
             return
         }
 
+        if let trip = loadedChapter?.tripwire, !tripwireArmed,
+           viewModel.countItem("item.tripwire_kit") > 0,
+           withinInteractReach(player: player.position, target: trip.armAnchorPosition.simd) {
+            viewModel.interactPrompt = trip.interactPrompt
+            return
+        }
+
         guard let beat = loadedChapter?.storyBeat, interactProp.isEnabled else {
             viewModel.interactPrompt = ""
             return
         }
-        let p = player.position
-        let t = beat.worldPosition.simd
-        let offsetX = p.x - t.x
-        let dz = abs(p.z - t.z)
-        let dy = abs(p.y - t.y)
-        let inFrontBand = offsetX <= 0.55 && offsetX >= -interactReachX
-        if inFrontBand && dz < interactReachZ && dy < interactReachY {
+        if withinInteractReach(player: player.position, target: beat.worldPosition.simd) {
             viewModel.interactPrompt = beat.interactPrompt
         } else {
             viewModel.interactPrompt = ""
@@ -423,12 +637,7 @@ final class SideScrollSceneController {
     private func nearestWorkstationInRange() -> CraftingWorkstationConfig? {
         let p = player.position
         for ws in loadedWorkstations {
-            let t = ws.worldPosition.simd
-            let offsetX = p.x - t.x
-            let dz = abs(p.z - t.z)
-            let dy = abs(p.y - t.y)
-            let inFrontBand = offsetX <= 0.55 && offsetX >= -interactReachX
-            if inFrontBand && dz < interactReachZ && dy < interactReachY {
+            if withinInteractReach(player: p, target: ws.worldPosition.simd) {
                 return ws
             }
         }
@@ -462,6 +671,18 @@ final class SideScrollSceneController {
 
         if nearestWorkstationInRange() != nil, workstationProp.isEnabled {
             viewModel.showCraftingSheet = true
+            return
+        }
+
+        if let trip = loadedChapter?.tripwire, !tripwireArmed,
+           viewModel.countItem("item.tripwire_kit") > 0,
+           withinInteractReach(player: player.position, target: trip.armAnchorPosition.simd),
+           viewModel.interactPrompt == trip.interactPrompt {
+            if viewModel.consumeOneItem(itemId: "item.tripwire_kit") {
+                tripwireArmed = true
+                tripwireVisual.isEnabled = true
+                viewModel.flashInteractMessage("Tripwire rigged across the gap.")
+            }
             return
         }
 

@@ -87,6 +87,7 @@ struct GameRootView: View {
 
     private var statusLine: some View {
         HStack(spacing: 10) {
+            Label("\(Int(round(viewModel.healthNormalized * 100)))% condition", systemImage: "heart.fill")
             Label(viewModel.isGrounded ? "Grounded" : "Air", systemImage: viewModel.isGrounded ? "figure.stand" : "figure.run")
             if viewModel.isClimbing {
                 Label("Climb", systemImage: "arrow.up.and.down")

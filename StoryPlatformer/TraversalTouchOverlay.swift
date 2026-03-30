@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Touch-first traversal: virtual stick (move + climb axis), jump, interact.
+/// Touch-first traversal: virtual stick (move + climb axis), interact, grounded melee, jump.
 struct TraversalTouchOverlay: View {
     @Bindable var viewModel: GameSessionViewModel
 
@@ -18,6 +18,7 @@ struct TraversalTouchOverlay: View {
 
                     VStack(spacing: 14) {
                         interactButton
+                        attackButton
                         jumpButton
                     }
                     .padding(.trailing, 16)
@@ -69,6 +70,27 @@ struct TraversalTouchOverlay: View {
         let dx = CGFloat(viewModel.horizontalInput) * r
         let dy = CGFloat(-viewModel.verticalInput) * r
         return CGSize(width: dx, height: dy)
+    }
+
+    private var attackButton: some View {
+        Button {
+            viewModel.attackRequested = true
+        } label: {
+            Label("Strike", systemImage: "figure.boxing")
+                .font(.body.weight(.semibold))
+                .frame(width: 72, height: 56)
+                .background(
+                    viewModel.isGrounded && !viewModel.isClimbing
+                        ? Color.orange.opacity(0.35)
+                        : Color.gray.opacity(0.25),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.isGrounded || viewModel.isClimbing)
+        .accessibilityLabel("Melee strike")
+        .accessibilityHint("Grounded strike with equipped weapon or fists.")
     }
 
     private var jumpButton: some View {

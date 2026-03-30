@@ -40,6 +40,11 @@ final class GameSessionViewModel {
 
     var interactRequested: Bool = false
 
+    /// Set by the scene each frame from horizontal input; melee strikes forward on this axis (±1).
+    var facingSign: Float = 1
+
+    var attackRequested: Bool = false
+
     /// Short hint near an interactable (empty when out of range).
     var interactPrompt: String = ""
 
@@ -76,6 +81,24 @@ final class GameSessionViewModel {
         nearWorkstationId = nil
         showCraftingSheet = false
         resetChapterCompletionSignal()
+        attackRequested = false
+    }
+
+    func applyDamageFromHostile(normalizedAmount: Float) {
+        let a = max(0, normalizedAmount)
+        healthNormalized = max(0, healthNormalized - a)
+    }
+
+    /// Removes one unit from the first matching stack (crafting / traps).
+    @discardableResult
+    func consumeOneItem(itemId: String) -> Bool {
+        for i in inventorySlots.indices {
+            guard var stack = inventorySlots[i], stack.itemId == itemId, stack.quantity > 0 else { continue }
+            stack.quantity -= 1
+            inventorySlots[i] = stack.quantity > 0 ? stack : nil
+            return true
+        }
+        return false
     }
 
     func registerStoryBeatCompleted(_ storyBeatId: String) {

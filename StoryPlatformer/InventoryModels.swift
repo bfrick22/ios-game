@@ -20,6 +20,8 @@ struct ItemDefinition: Sendable, Hashable, Equatable {
     var healFraction: Float?
     /// Mission item: shown when player taps Use (no consume).
     var missionUseMessage: String?
+    /// Weapon: damage per grounded melee strike (normalized 0…1 vs enemy).
+    var meleeDamage: Float?
 }
 
 struct InventoryStack: Sendable, Hashable, Equatable {
@@ -42,7 +44,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "backpack.fill",
             healFraction: nil,
-            missionUseMessage: "Your go-bag is packed for a hard exit — keep it close until you are clear."
+            missionUseMessage: "Your go-bag is packed for a hard exit — keep it close until you are clear.",
+            meleeDamage: nil
         ),
         "item.route_map": ItemDefinition(
             id: "item.route_map",
@@ -51,7 +54,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "map.fill",
             healFraction: nil,
-            missionUseMessage: "Chalk and pen marks trace the arterial — follow the line, not the rumors."
+            missionUseMessage: "Chalk and pen marks trace the arterial — follow the line, not the rumors.",
+            meleeDamage: nil
         ),
         "item.medkit": ItemDefinition(
             id: "item.medkit",
@@ -60,7 +64,8 @@ enum ItemCatalog {
             maxStack: 2,
             systemImageName: "cross.case.fill",
             healFraction: 0.35,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: nil
         ),
         "item.energy_bar": ItemDefinition(
             id: "item.energy_bar",
@@ -69,7 +74,8 @@ enum ItemCatalog {
             maxStack: 3,
             systemImageName: "leaf.fill",
             healFraction: 0.08,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: nil
         ),
         "item.flashlight": ItemDefinition(
             id: "item.flashlight",
@@ -78,7 +84,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "flashlight.on.fill",
             healFraction: nil,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: nil
         ),
         "item.stick": ItemDefinition(
             id: "item.stick",
@@ -87,7 +94,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "figure.fencing",
             healFraction: nil,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: 0.16
         ),
         "item.knife": ItemDefinition(
             id: "item.knife",
@@ -96,7 +104,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "scissors",
             healFraction: nil,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: 0.24
         ),
         "item.scrap_wire": ItemDefinition(
             id: "item.scrap_wire",
@@ -105,7 +114,8 @@ enum ItemCatalog {
             maxStack: 5,
             systemImageName: "cable.connector",
             healFraction: nil,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: nil
         ),
         "item.tripwire_kit": ItemDefinition(
             id: "item.tripwire_kit",
@@ -114,7 +124,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "line.diagonal",
             healFraction: nil,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: nil
         ),
         "item.reinforced_stick": ItemDefinition(
             id: "item.reinforced_stick",
@@ -123,7 +134,8 @@ enum ItemCatalog {
             maxStack: 1,
             systemImageName: "figure.fencing",
             healFraction: nil,
-            missionUseMessage: nil
+            missionUseMessage: nil,
+            meleeDamage: 0.3
         ),
     ]
 }

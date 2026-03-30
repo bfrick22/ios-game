@@ -45,6 +45,23 @@ struct CraftingWorkstationConfig: Codable, Sendable, Hashable, Equatable {
     var interactPrompt: String
 }
 
+/// Hostile patrol dummy; grounded melee only (no sci-fi weapons).
+struct CombatEnemyConfig: Codable, Sendable, Hashable, Equatable {
+    var id: String
+    var worldPosition: Vector3Config
+    /// Patrol between `worldPosition.x ± patrolHalfWidth`.
+    var patrolHalfWidth: Float
+    var moveSpeed: Float
+    var maxHealth: Float
+}
+
+/// Tripwire: interact at anchor to consume kit and arm; first enemy in trigger volume takes damage.
+struct TripwireTrapConfig: Codable, Sendable, Hashable, Equatable {
+    var armAnchorPosition: Vector3Config
+    var interactPrompt: String
+    var triggerVolume: AxisAlignedVolumeConfig
+}
+
 /// Hand-authored chapter metadata: objective id, spawn, completion trigger id, narrative text ids.
 struct ChapterConfig: Codable, Sendable, Identifiable, Hashable, Equatable {
     /// Stable id for saves and routing (e.g. `chapter.event`).
@@ -71,6 +88,10 @@ struct ChapterConfig: Codable, Sendable, Identifiable, Hashable, Equatable {
     var storyBeat: ChapterStoryBeatConfig?
     /// Optional workbenches for whitelist crafting (chapter 2+).
     var craftingWorkstations: [CraftingWorkstationConfig]?
+    /// Optional hostile patrols for melee / tripwire demo.
+    var combatEnemies: [CombatEnemyConfig]?
+    /// Optional tripwire: anchor interact + trigger volume.
+    var tripwire: TripwireTrapConfig?
 }
 
 enum ChapterRegistry {
@@ -100,7 +121,9 @@ enum ChapterRegistry {
                 grantsItemId: "item.go_bag",
                 grantsItemIds: nil
             ),
-            craftingWorkstations: nil
+            craftingWorkstations: nil,
+            combatEnemies: nil,
+            tripwire: nil
         ),
         ChapterConfig(
             id: "chapter.neighborhood",
@@ -135,7 +158,24 @@ enum ChapterRegistry {
                     worldPosition: Vector3Config(x: 6.2, y: 0.55, z: 0),
                     interactPrompt: "Use workbench"
                 ),
-            ]
+            ],
+            combatEnemies: [
+                CombatEnemyConfig(
+                    id: "hostile.scavenger_a",
+                    worldPosition: Vector3Config(x: 7.5, y: 0.55, z: 0),
+                    patrolHalfWidth: 0.95,
+                    moveSpeed: 1.15,
+                    maxHealth: 1.0
+                ),
+            ],
+            tripwire: TripwireTrapConfig(
+                armAnchorPosition: Vector3Config(x: 5.95, y: 0.55, z: 0),
+                interactPrompt: "Rig tripwire",
+                triggerVolume: AxisAlignedVolumeConfig(
+                    min: Vector3Config(x: 6.88, y: 0.05, z: -0.55),
+                    max: Vector3Config(x: 7.28, y: 1.55, z: 0.55)
+                )
+            )
         ),
     ]
 

@@ -22,6 +22,7 @@
 		B1000012 /* InventoryHUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000012 /* InventoryHUDView.swift */; };
 		B1000013 /* CraftingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000013 /* CraftingModels.swift */; };
 		B1000014 /* CraftingSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000014 /* CraftingSheetView.swift */; };
+		B1000015 /* CombatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000015 /* CombatModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +40,7 @@
 		F1000012 /* InventoryHUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryHUDView.swift; sourceTree = "<group>"; };
 		F1000013 /* CraftingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftingModels.swift; sourceTree = "<group>"; };
 		F1000014 /* CraftingSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftingSheetView.swift; sourceTree = "<group>"; };
+		F1000015 /* CombatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatModels.swift; sourceTree = "<group>"; };
 		F1000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F1000099 /* StoryPlatformer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StoryPlatformer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -79,6 +81,7 @@
 				F1000012 /* InventoryHUDView.swift */,
 				F1000013 /* CraftingModels.swift */,
 				F1000014 /* CraftingSheetView.swift */,
+				F1000015 /* CombatModels.swift */,
 				F1000010 /* Assets.xcassets */,
 			);
 			path = StoryPlatformer;
@@ -176,6 +179,7 @@
 				B1000012 /* InventoryHUDView.swift in Sources */,
 				B1000013 /* CraftingModels.swift in Sources */,
 				B1000014 /* CraftingSheetView.swift in Sources */,
+				B1000015 /* CombatModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
