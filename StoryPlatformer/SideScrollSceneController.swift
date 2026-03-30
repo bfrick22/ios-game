@@ -65,10 +65,16 @@ final class SideScrollSceneController {
     private var hazardRegion: AxisAlignedRegion?
     private var hazardCooldownRemaining: Float = 0
 
-    private static let capsuleHeight: Float = 1.15
-    private static let capsuleRadius: Float = 0.32
+    private static let capsuleHeight: Float = 1.15 * 0.70
+    private static let capsuleRadius: Float = 0.32 * 0.70
     /// Matches `PhysicsBodyComponent` mass in `buildPlayer()`; used for impulse = mass × Δv.
     private static let playerMass: Float = 70
+
+    private lazy var playerGroundMaterial: PhysicsMaterialResource = {
+        PhysicsMaterialResource.generate(friction: 0.95, restitution: 0)
+    }()
+
+    private let landingSettleVyThreshold: Float = 0.6 * 0.70
 
     /// Ladder volume (hand-tuned to match `ladderVisual`).
     private let climbRegion = AxisAlignedRegion(
@@ -215,6 +221,7 @@ final class SideScrollSceneController {
 
         let grounded = computeGrounded()
         viewModel.isGrounded = grounded
+        dampLandingVerticalVelocityIfNeeded(grounded: grounded, climbing: climbing)
 
         updateFacing(viewModel: viewModel)
 
@@ -257,7 +264,7 @@ final class SideScrollSceneController {
         ground.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
         ground.components.set(PhysicsBodyComponent(
             massProperties: .default,
-            material: .default,
+            material: playerGroundMaterial,
             mode: .static
         ))
     }
@@ -530,15 +537,23 @@ final class SideScrollSceneController {
             mesh: .generateBox(size: SIMD3<Float>(r * 2, h, r * 2), cornerRadius: r * 0.85),
             materials: [SimpleMaterial(color: UIColor(red: 0.2, green: 0.45, blue: 0.95, alpha: 1), isMetallic: false)]
         )
-        player.position = SIMD3<Float>(0, h / 2 + 0.15, 0)
+        player.position = SIMD3<Float>(0, h / 2 + 0.15 * 0.70, 0)
         let shape = ShapeResource.generateCapsule(height: h, radius: r)
         player.components.set(CollisionComponent(shapes: [shape], mode: .default))
         player.components.set(PhysicsBodyComponent(
             massProperties: .init(shape: shape, mass: Self.playerMass),
-            material: .default,
+            material: playerGroundMaterial,
             mode: .dynamic
         ))
         player.components.set(PhysicsMotionComponent())
+    }
+
+    private func dampLandingVerticalVelocityIfNeeded(grounded: Bool, climbing: Bool) {
+        guard grounded, !climbing else { return }
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let vy = motion.linearVelocity.y
+        guard abs(vy) > 0, abs(vy) < landingSettleVyThreshold else { return }
+        player.applyLinearImpulse(SIMD3<Float>(0, -Self.playerMass * vy, 0), relativeTo: nil)
     }
 
     private func resetPlayerAtSpawn(_ center: SIMD3<Float>, viewModel: GameSessionViewModel) {
@@ -575,7 +590,7 @@ final class SideScrollSceneController {
     }
 
     private func applyMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
-        let runSpeed: Float = 5
+        let runSpeed: Float = 4.35
         let accel: Float = 18
         guard let motion = player.components[PhysicsMotionComponent.self] else { return }
         let v = motion.linearVelocity
@@ -720,7 +735,7 @@ final class SideScrollSceneController {
         let v = motion.linearVelocity
 
         if climbing {
-            let deltaVy = max(0, 4.4 - v.y)
+            let deltaVy = max(0, 3.7 - v.y)
             player.applyLinearImpulse(
                 SIMD3<Float>(Self.playerMass * 2, Self.playerMass * deltaVy, 0),
                 relativeTo: nil
@@ -730,9 +745,9 @@ final class SideScrollSceneController {
 
         guard grounded else { return }
         // Ignore small upward bounce so jump still fires when settling on the ground.
-        if v.y > 0.45 { return }
+        if v.y > 0.32 { return }
 
-        let deltaVy = 6.45 - v.y
+        let deltaVy = 5.4 - v.y
         player.applyLinearImpulse(SIMD3<Float>(0, Self.playerMass * deltaVy, 0), relativeTo: nil)
     }
 

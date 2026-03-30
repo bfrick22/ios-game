@@ -3,10 +3,10 @@ import simd
 
 /// Side-scroller rig: follow player X (with velocity-aware look-ahead), smooth Y, damped Z depth. Camera -Z aims at the player.
 struct SideScrollCameraRig {
-    var offsetZ: Float = 7
-    var heightY: Float = 1.6
+    var offsetZ: Float = 8.35
+    var heightY: Float = 1.48
     /// Base horizontal offset in the facing / movement direction.
-    var lookAheadX: Float = 0.85
+    var lookAheadX: Float = 0.78
     /// Extra look-ahead from horizontal speed (meters per m/s).
     var velocityLookAheadScale: Float = 0.14
     var lookAheadMaxExtra: Float = 1.15
@@ -17,11 +17,14 @@ struct SideScrollCameraRig {
 
     private var currentEye = SIMD3<Float>(0, 1.6, 7)
     /// Smoothed aim height so look-at does not snap on every small vertical change.
-    private var smoothedLookY: Float = 0.55
+    /// Chest-height look offset, scaled with shorter player capsule (~0.70×).
+    private var lookAtOffsetY: Float { 0.55 * 0.70 }
+
+    private var smoothedLookY: Float = 0.55 * 0.70
 
     mutating func reset(eye: SIMD3<Float>, playerPosition: SIMD3<Float>) {
         currentEye = eye
-        smoothedLookY = playerPosition.y + 0.55
+        smoothedLookY = playerPosition.y + lookAtOffsetY
     }
 
     mutating func step(
@@ -41,7 +44,7 @@ struct SideScrollCameraRig {
         let dynamicLook = lookAheadX + extra
         let targetX = playerPosition.x + dynamicLook * direction
 
-        let rawLookY = playerPosition.y + 0.55
+        let rawLookY = playerPosition.y + lookAtOffsetY
 
         let targetY = playerPosition.y + heightY
         let targetZ = playerPosition.z + offsetZ
