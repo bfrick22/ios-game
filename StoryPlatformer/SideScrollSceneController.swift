@@ -64,6 +64,10 @@ final class SideScrollSceneController {
     private var meleeCooldownRemaining: Float = 0
     private var hostileContactCooldown: Float = 0
 
+    // Player visual animation state (does not affect physics).
+    private var locomotionPhase: Float = 0
+    private var locomotionBlend: Float = 0
+
     private var loadedChapter: ChapterConfig?
     private var loadedWorkstations: [CraftingWorkstationConfig] = []
     private var completionRegion = AxisAlignedRegion(
@@ -243,6 +247,7 @@ final class SideScrollSceneController {
         dampLandingVerticalVelocityIfNeeded(grounded: grounded, climbing: climbing)
 
         updateFacing(viewModel: viewModel)
+        updatePlayerVisual(deltaTime: deltaTime, viewModel: viewModel)
 
         if hazardCooldownRemaining > 0 {
             hazardCooldownRemaining = max(0, hazardCooldownRemaining - deltaTime)
@@ -514,6 +519,83 @@ final class SideScrollSceneController {
     private func updateFacing(viewModel: GameSessionViewModel) {
         if abs(viewModel.horizontalInput) > 0.12 {
             viewModel.facingSign = viewModel.horizontalInput > 0 ? 1 : -1
+        } else if let motion = player.components[PhysicsMotionComponent.self], abs(motion.linearVelocity.x) > 0.22 {
+            // Keep facing aligned with horizontal motion when stick is neutral (e.g. after release).
+            viewModel.facingSign = motion.linearVelocity.x > 0 ? 1 : -1
+        }
+    }
+
+    private func updatePlayerVisual(deltaTime: Float, viewModel: GameSessionViewModel) {
+        // Face the rig without rotating the physics body. Camera sits at +Z looking at the player along -Z;
+        // authored parts use local +Z as depth. Rotate ±90° so the figure faces ±X (side-scroll travel), not ±Z.
+        let facingAngleY: Float = viewModel.facingSign >= 0 ? .pi / 2 : -.pi / 2
+        playerVisualRoot.transform.rotation = simd_quatf(angle: facingAngleY, axis: SIMD3<Float>(0, 1, 0))
+
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let v = motion.linearVelocity
+        let planarSpeed = simd_length(SIMD2<Float>(v.x, v.z))
+
+        // Blend in/out of locomotion with idle damping.
+        let speedDeadZone: Float = 0.15
+        let speedFull: Float = 2.1
+        let targetBlend = min(1, max(0, (planarSpeed - speedDeadZone) / max(0.01, (speedFull - speedDeadZone))))
+        let blendResponse: Float = targetBlend > locomotionBlend ? 10.5 : 7.5
+        locomotionBlend += (targetBlend - locomotionBlend) * min(1, blendResponse * deltaTime)
+
+        // Advance phase based on movement mode.
+        let phaseRate: Float
+        if viewModel.isClimbing {
+            let climbSpeed = abs(v.y) + planarSpeed * 0.25
+            phaseRate = (1.8 + 0.65 * min(4, climbSpeed)) * 2 * .pi
+        } else {
+            let walk = min(1, planarSpeed / 4.35)
+            let strideHz = (1.4 + 1.9 * walk)
+            phaseRate = strideHz * 2 * .pi
+        }
+        locomotionPhase = fmod(locomotionPhase + phaseRate * deltaTime, 2 * .pi)
+
+        let s = sin(locomotionPhase)
+        let c = cos(locomotionPhase)
+
+        // Subtle body bob while moving.
+        let baseTorsoY = Self.capsuleHeight * 0.60
+        playerTorso.position.y = baseTorsoY + (0.03 * locomotionBlend) * abs(s)
+
+        if viewModel.isClimbing {
+            // "Reach" motion: alternate arms/legs with a small sway.
+            let reachAmp: Float = 0.75 * locomotionBlend
+            let swayAmp: Float = 0.25 * locomotionBlend
+
+            let leftArmRot =
+                simd_quatf(angle: reachAmp * s, axis: SIMD3<Float>(1, 0, 0)) *
+                simd_quatf(angle: swayAmp * c, axis: SIMD3<Float>(0, 0, 1))
+            let rightArmRot =
+                simd_quatf(angle: -reachAmp * s, axis: SIMD3<Float>(1, 0, 0)) *
+                simd_quatf(angle: -swayAmp * c, axis: SIMD3<Float>(0, 0, 1))
+            let leftLegRot = simd_quatf(angle: -0.55 * reachAmp * s, axis: SIMD3<Float>(1, 0, 0))
+            let rightLegRot = simd_quatf(angle: 0.55 * reachAmp * s, axis: SIMD3<Float>(1, 0, 0))
+
+            playerLeftArm.transform.rotation = leftArmRot
+            playerRightArm.transform.rotation = rightArmRot
+            playerLeftLeg.transform.rotation = leftLegRot
+            playerRightLeg.transform.rotation = rightLegRot
+        } else {
+            // Walk/run: swing about local X so limbs move fore/aft (depth) in side view — not toward the midline (Z), which reads as an X.
+            let armAmp: Float = 0.85 * locomotionBlend
+            let legAmp: Float = 1.05 * locomotionBlend
+
+            playerLeftArm.transform.rotation = simd_quatf(angle: armAmp * s, axis: SIMD3<Float>(1, 0, 0))
+            playerRightArm.transform.rotation = simd_quatf(angle: -armAmp * s, axis: SIMD3<Float>(1, 0, 0))
+            playerLeftLeg.transform.rotation = simd_quatf(angle: -legAmp * s, axis: SIMD3<Float>(1, 0, 0))
+            playerRightLeg.transform.rotation = simd_quatf(angle: legAmp * s, axis: SIMD3<Float>(1, 0, 0))
+        }
+
+        // Clamp tiny residuals at full idle.
+        if locomotionBlend < 0.01 {
+            playerLeftArm.transform.rotation = .init(angle: 0, axis: SIMD3<Float>(1, 0, 0))
+            playerRightArm.transform.rotation = .init(angle: 0, axis: SIMD3<Float>(1, 0, 0))
+            playerLeftLeg.transform.rotation = .init(angle: 0, axis: SIMD3<Float>(1, 0, 0))
+            playerRightLeg.transform.rotation = .init(angle: 0, axis: SIMD3<Float>(1, 0, 0))
         }
     }
 
