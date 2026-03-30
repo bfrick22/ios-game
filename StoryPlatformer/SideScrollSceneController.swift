@@ -41,6 +41,8 @@ final class SideScrollSceneController {
     private let hazardStrip = ModelEntity()
     private let completionMarker = ModelEntity()
     private let tripwireVisual = ModelEntity()
+    private let corridorWallNegZ = Entity()
+    private let corridorWallPosZ = Entity()
     private var cameraRig = SideScrollCameraRig()
     private var lastMediaTime: CFTimeInterval?
     /// Scene graph (meshes, hierarchy) built once per controller lifetime.
@@ -76,6 +78,11 @@ final class SideScrollSceneController {
 
     private let landingSettleVyThreshold: Float = 0.6 * 0.70
 
+    /// Half-width along world Z for walkable depth; inner faces of `corridorWall*` sit at ±this value.
+    private let corridorHalfWidth: Float = 2.12
+    private let depthRunSpeed: Float = 4.0
+    private let depthAccel: Float = 20
+
     /// Ladder volume (hand-tuned to match `ladderVisual`).
     private let climbRegion = AxisAlignedRegion(
         min: SIMD3<Float>(3.52, 0.02, -0.58),
@@ -100,6 +107,7 @@ final class SideScrollSceneController {
             buildInteractProp()
             buildWorkstationProp()
             buildTripwireVisualPlaceholder()
+            buildCorridorWalls()
             buildPlayer()
 
             root.addChild(ground)
@@ -109,6 +117,8 @@ final class SideScrollSceneController {
             root.addChild(tripwireVisual)
             root.addChild(interactProp)
             root.addChild(workstationProp)
+            root.addChild(corridorWallNegZ)
+            root.addChild(corridorWallPosZ)
             root.addChild(player)
             root.addChild(cameraAnchor)
             cameraAnchor.addChild(perspectiveCamera)
@@ -215,9 +225,8 @@ final class SideScrollSceneController {
             applyClimbingMovement(viewModel: viewModel, deltaTime: deltaTime)
         } else {
             applyMovement(viewModel: viewModel, deltaTime: deltaTime)
+            applyCorridorDepthMovement(viewModel: viewModel, deltaTime: deltaTime)
         }
-
-        lockPlayPlane(deltaTime: deltaTime)
 
         let grounded = computeGrounded()
         viewModel.isGrounded = grounded
@@ -267,6 +276,22 @@ final class SideScrollSceneController {
             material: playerGroundMaterial,
             mode: .static
         ))
+    }
+
+    private func buildCorridorWalls() {
+        let thickness: Float = 0.12
+        let halfExtentZ = corridorHalfWidth + thickness * 0.5
+        let spanX: Float = 52
+        let wallSize = SIMD3<Float>(spanX, 10, thickness)
+        let shape = ShapeResource.generateBox(size: wallSize)
+
+        for wall in [corridorWallNegZ, corridorWallPosZ] {
+            wall.components.set(CollisionComponent(shapes: [shape], mode: .default))
+            wall.components.set(PhysicsBodyComponent(massProperties: .default, mode: .static))
+        }
+
+        corridorWallNegZ.position = SIMD3<Float>(4, 2.5, -halfExtentZ)
+        corridorWallPosZ.position = SIMD3<Float>(4, 2.5, halfExtentZ)
     }
 
     private func buildLadderVisual() {
@@ -597,12 +622,39 @@ final class SideScrollSceneController {
         let targetVx = viewModel.horizontalInput * runSpeed
         let t = min(1, accel * deltaTime)
         let deltaVx = (targetVx - v.x) * t
-        let zScale = max(0, 1 - 6 * deltaTime)
-        let deltaVz = v.z * (zScale - 1)
         player.applyLinearImpulse(
-            SIMD3<Float>(Self.playerMass * deltaVx, 0, Self.playerMass * deltaVz),
+            SIMD3<Float>(Self.playerMass * deltaVx, 0, 0),
             relativeTo: nil
         )
+    }
+
+    private func applyCorridorDepthMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
+        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
+        let v = motion.linearVelocity
+        let targetVz = viewModel.verticalInput * depthRunSpeed
+        let t = min(1, depthAccel * deltaTime)
+        let deltaVz = (targetVz - v.z) * t
+        player.applyLinearImpulse(
+            SIMD3<Float>(0, 0, Self.playerMass * deltaVz),
+            relativeTo: nil
+        )
+
+        var p = player.position
+        let zMin = -corridorHalfWidth
+        let zMax = corridorHalfWidth
+        let clamped = min(zMax, max(zMin, p.z))
+        if clamped != p.z {
+            p.z = clamped
+            player.position = p
+            if var m = player.components[PhysicsMotionComponent.self] {
+                var vel = m.linearVelocity
+                if (clamped <= zMin && vel.z < 0) || (clamped >= zMax && vel.z > 0) {
+                    vel.z = 0
+                }
+                m.linearVelocity = vel
+                player.components.set(m)
+            }
+        }
     }
 
     private func applyClimbingMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
@@ -632,20 +684,6 @@ final class SideScrollSceneController {
         p.x += (ladderX - p.x) * min(1, 6 * deltaTime)
         p.z += (0 - p.z) * min(1, 10 * deltaTime)
         player.position = p
-    }
-
-    private func lockPlayPlane(deltaTime: Float) {
-        guard let motion = player.components[PhysicsMotionComponent.self] else { return }
-        let v = motion.linearVelocity
-        let zScale = max(0, 1 - 8 * deltaTime)
-        let deltaVz = v.z * (zScale - 1)
-        player.applyLinearImpulse(SIMD3<Float>(0, 0, Self.playerMass * deltaVz), relativeTo: nil)
-
-        if abs(player.position.z) > 0.06 {
-            var p = player.position
-            p.z *= max(0, 1 - 5 * deltaTime)
-            player.position = p
-        }
     }
 
     private func computeGrounded() -> Bool {

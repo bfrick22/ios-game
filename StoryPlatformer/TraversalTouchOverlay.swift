@@ -66,7 +66,11 @@ struct TraversalTouchOverlay: View {
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Move")
-        .accessibilityHint(viewModel.isClimbing ? "Drag to move and climb." : "Drag left and right to move.")
+        .accessibilityHint(
+            viewModel.isClimbing
+                ? "Drag to move and climb."
+                : "Drag left and right to move forward and back. Drag up and down to move in depth."
+        )
     }
 
     private var stickKnobOffset: CGSize {
