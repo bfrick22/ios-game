@@ -34,6 +34,13 @@ final class SideScrollSceneController {
     private let root = Entity()
     private let cameraAnchor = Entity()
     private let player = ModelEntity()
+    private let playerVisualRoot = Entity()
+    private let playerTorso = ModelEntity()
+    private let playerHead = ModelEntity()
+    private let playerLeftArm = ModelEntity()
+    private let playerRightArm = ModelEntity()
+    private let playerLeftLeg = ModelEntity()
+    private let playerRightLeg = ModelEntity()
     private let ground = ModelEntity()
     private let ladderVisual = ModelEntity()
     private let interactProp = ModelEntity()
@@ -616,10 +623,8 @@ final class SideScrollSceneController {
         let h = Self.capsuleHeight
         let r = Self.capsuleRadius
         player.name = "Player"
-        player.model = ModelComponent(
-            mesh: .generateBox(size: SIMD3<Float>(r * 2, h, r * 2), cornerRadius: r * 0.85),
-            materials: [SimpleMaterial(color: UIColor(red: 0.2, green: 0.45, blue: 0.95, alpha: 1), isMetallic: false)]
-        )
+        // Keep the physics body/collider on `player`; visuals live on a child rig.
+        player.model = nil
         player.position = SIMD3<Float>(0, h / 2 + 0.15 * 0.70, 0)
         let shape = ShapeResource.generateCapsule(height: h, radius: r)
         player.components.set(CollisionComponent(shapes: [shape], mode: .default))
@@ -629,6 +634,71 @@ final class SideScrollSceneController {
             mode: .dynamic
         ))
         player.components.set(PhysicsMotionComponent())
+
+        playerVisualRoot.name = "PlayerVisualRoot"
+        if playerVisualRoot.parent == nil {
+            player.addChild(playerVisualRoot)
+        }
+
+        let mat = SimpleMaterial(color: UIColor(red: 0.2, green: 0.45, blue: 0.95, alpha: 1), isMetallic: false)
+
+        // Simple primitive-based humanoid proportions (tuned for current capsule height).
+        let headRadius = r * 0.55
+        let torsoW = r * 1.55
+        let torsoH = h * 0.50
+        let torsoD = r * 1.05
+
+        let armRadius = r * 0.22
+        let armLen = h * 0.40
+
+        let legRadius = r * 0.24
+        let legLen = h * 0.46
+
+        // Torso (centered)
+        playerTorso.name = "PlayerTorso"
+        playerTorso.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3<Float>(torsoW, torsoH, torsoD), cornerRadius: min(r * 0.35, torsoW * 0.25)),
+            materials: [mat]
+        )
+        playerTorso.position = SIMD3<Float>(0, h * 0.60, 0)
+
+        // Head (above torso)
+        playerHead.name = "PlayerHead"
+        playerHead.model = ModelComponent(mesh: .generateSphere(radius: headRadius), materials: [mat])
+        playerHead.position = SIMD3<Float>(0, h * 0.60 + torsoH * 0.58 + headRadius * 1.15, 0)
+
+        // Arms (rounded boxes; `MeshResource.generateCapsule` is not available on all SDKs)
+        let armMesh = MeshResource.generateBox(
+            size: SIMD3<Float>(armRadius * 2, armLen, armRadius * 2),
+            cornerRadius: armRadius * 0.85
+        )
+        playerLeftArm.name = "PlayerLeftArm"
+        playerLeftArm.model = ModelComponent(mesh: armMesh, materials: [mat])
+        playerLeftArm.position = SIMD3<Float>(-(torsoW * 0.62), h * 0.60 + torsoH * 0.25, 0)
+
+        playerRightArm.name = "PlayerRightArm"
+        playerRightArm.model = ModelComponent(mesh: armMesh, materials: [mat])
+        playerRightArm.position = SIMD3<Float>((torsoW * 0.62), h * 0.60 + torsoH * 0.25, 0)
+
+        // Legs (rounded boxes)
+        let legMesh = MeshResource.generateBox(
+            size: SIMD3<Float>(legRadius * 2, legLen, legRadius * 2),
+            cornerRadius: legRadius * 0.85
+        )
+        playerLeftLeg.name = "PlayerLeftLeg"
+        playerLeftLeg.model = ModelComponent(mesh: legMesh, materials: [mat])
+        playerLeftLeg.position = SIMD3<Float>(-(torsoW * 0.25), h * 0.26, 0)
+
+        playerRightLeg.name = "PlayerRightLeg"
+        playerRightLeg.model = ModelComponent(mesh: legMesh, materials: [mat])
+        playerRightLeg.position = SIMD3<Float>((torsoW * 0.25), h * 0.26, 0)
+
+        if playerTorso.parent == nil { playerVisualRoot.addChild(playerTorso) }
+        if playerHead.parent == nil { playerVisualRoot.addChild(playerHead) }
+        if playerLeftArm.parent == nil { playerVisualRoot.addChild(playerLeftArm) }
+        if playerRightArm.parent == nil { playerVisualRoot.addChild(playerRightArm) }
+        if playerLeftLeg.parent == nil { playerVisualRoot.addChild(playerLeftLeg) }
+        if playerRightLeg.parent == nil { playerVisualRoot.addChild(playerRightLeg) }
     }
 
     private func dampLandingVerticalVelocityIfNeeded(grounded: Bool, climbing: Bool) {
