@@ -1,3 +1,4 @@
+import os
 import QuartzCore
 import RealityKit
 import simd
@@ -27,6 +28,9 @@ private struct EnemyRuntime {
 final class SideScrollSceneController {
     private(set) var perspectiveCamera = PerspectiveCamera()
 
+    /// Profile with Instruments → os_signpost / Swift Concurrency (Points of Interest): `chapter_scene_attach`, `chapter_scene_teardown`, `simulation_tick`.
+    private let signposter = OSSignposter(subsystem: "com.storyplatformer.app", category: "Gameplay")
+
     private let root = Entity()
     private let cameraAnchor = Entity()
     private let player = ModelEntity()
@@ -39,7 +43,10 @@ final class SideScrollSceneController {
     private let tripwireVisual = ModelEntity()
     private var cameraRig = SideScrollCameraRig()
     private var lastMediaTime: CFTimeInterval?
-    private var didAttach = false
+    /// Scene graph (meshes, hierarchy) built once per controller lifetime.
+    private var sceneGraphBuilt = false
+    /// `root` is currently added to `RealityView` content.
+    private var attachedToScene = false
 
     private var enemyRuntimes: [EnemyRuntime] = []
     private var tripwireArmed = false
@@ -77,33 +84,56 @@ final class SideScrollSceneController {
         viewModel: GameSessionViewModel,
         chapter: ChapterConfig
     ) {
-        guard !didAttach else { return }
-        didAttach = true
+        if !sceneGraphBuilt {
+            buildGround()
+            buildLadderVisual()
+            buildHazardStripPlaceholder()
+            buildCompletionMarkerPlaceholder()
+            buildInteractProp()
+            buildWorkstationProp()
+            buildTripwireVisualPlaceholder()
+            buildPlayer()
 
-        buildGround()
-        buildLadderVisual()
-        buildHazardStripPlaceholder()
-        buildCompletionMarkerPlaceholder()
-        buildInteractProp()
-        buildWorkstationProp()
-        buildTripwireVisualPlaceholder()
-        buildPlayer()
+            root.addChild(ground)
+            root.addChild(ladderVisual)
+            root.addChild(hazardStrip)
+            root.addChild(completionMarker)
+            root.addChild(tripwireVisual)
+            root.addChild(interactProp)
+            root.addChild(workstationProp)
+            root.addChild(player)
+            root.addChild(cameraAnchor)
+            cameraAnchor.addChild(perspectiveCamera)
 
-        root.addChild(ground)
-        root.addChild(ladderVisual)
-        root.addChild(hazardStrip)
-        root.addChild(completionMarker)
-        root.addChild(tripwireVisual)
-        root.addChild(interactProp)
-        root.addChild(workstationProp)
-        root.addChild(player)
-        root.addChild(cameraAnchor)
-        cameraAnchor.addChild(perspectiveCamera)
+            sceneGraphBuilt = true
+        }
 
+        guard !attachedToScene else { return }
+
+        let loadID = signposter.makeSignpostID()
+        let loadState = signposter.beginInterval("chapter_scene_attach", id: loadID)
         insertRoot(root)
+        attachedToScene = true
 
         applyChapter(chapter, viewModel: viewModel)
+        signposter.endInterval("chapter_scene_attach", loadState)
+
         tick(viewModel: viewModel)
+    }
+
+    /// Removes the scene from `RealityView` and clears combat entities so the next attach loads a clean chapter state.
+    /// Call from `onDisappear` so only one chapter scene stays resident while navigating away.
+    func teardown() {
+        guard attachedToScene else { return }
+        let id = signposter.makeSignpostID()
+        let state = signposter.beginInterval("chapter_scene_teardown", id: id)
+        removeAllCombatEntities()
+        root.removeFromParent()
+        attachedToScene = false
+        lastMediaTime = nil
+        loadedChapter = nil
+        loadedWorkstations = []
+        signposter.endInterval("chapter_scene_teardown", state)
     }
 
     /// Reapply spawn, volumes, and authored props when the hosted chapter changes (same scene instance).
@@ -149,10 +179,16 @@ final class SideScrollSceneController {
 
         rebuildCombat(from: chapter)
 
-        resetPlayerAtSpawn(chapter.playerSpawn.simd)
+        resetPlayerAtSpawn(chapter.playerSpawn.simd, viewModel: viewModel)
     }
 
     func tick(viewModel: GameSessionViewModel) {
+        guard attachedToScene else { return }
+
+        let tickID = signposter.makeSignpostID()
+        let tickState = signposter.beginInterval("simulation_tick", id: tickID)
+        defer { signposter.endInterval("simulation_tick", tickState) }
+
         let now = CACurrentMediaTime()
         let deltaTime: Float
         if let last = lastMediaTime {
@@ -200,7 +236,13 @@ final class SideScrollSceneController {
         processInteract(viewModel: viewModel)
         processChapterCompletion(viewModel: viewModel)
 
-        perspectiveCamera.transform = cameraRig.step(deltaTime: deltaTime, playerPosition: player.position)
+        let vx = player.components[PhysicsMotionComponent.self]?.linearVelocity.x ?? 0
+        perspectiveCamera.transform = cameraRig.step(
+            deltaTime: deltaTime,
+            playerPosition: player.position,
+            horizontalVelocity: vx,
+            facingSign: viewModel.facingSign
+        )
     }
 
     private func buildGround() {
@@ -319,7 +361,7 @@ final class SideScrollSceneController {
         tripwireVisual.position = center
     }
 
-    private func rebuildCombat(from chapter: ChapterConfig) {
+    private func removeAllCombatEntities() {
         for er in enemyRuntimes {
             er.entity.removeFromParent()
         }
@@ -327,6 +369,10 @@ final class SideScrollSceneController {
         tripwireArmed = false
         tripwireRegion = nil
         tripwireVisual.isEnabled = false
+    }
+
+    private func rebuildCombat(from chapter: ChapterConfig) {
+        removeAllCombatEntities()
 
         if let tw = chapter.tripwire {
             tripwireRegion = AxisAlignedRegion(min: tw.triggerVolume.min.simd, max: tw.triggerVolume.max.simd)
@@ -492,7 +538,7 @@ final class SideScrollSceneController {
         ))
     }
 
-    private func resetPlayerAtSpawn(_ center: SIMD3<Float>) {
+    private func resetPlayerAtSpawn(_ center: SIMD3<Float>, viewModel: GameSessionViewModel) {
         let h = Self.capsuleHeight
         var p = center
         let minCenterY = h * 0.5 + 0.05
@@ -516,8 +562,13 @@ final class SideScrollSceneController {
             player.position.y + cameraRig.heightY,
             player.position.z + cameraRig.offsetZ
         )
-        cameraRig.reset(eye: eye)
-        perspectiveCamera.transform = cameraRig.step(deltaTime: 1, playerPosition: player.position)
+        cameraRig.reset(eye: eye, playerPosition: player.position)
+        perspectiveCamera.transform = cameraRig.step(
+            deltaTime: 1,
+            playerPosition: player.position,
+            horizontalVelocity: 0,
+            facingSign: viewModel.facingSign
+        )
     }
 
     private func applyMovement(viewModel: GameSessionViewModel, deltaTime: Float) {

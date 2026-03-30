@@ -61,6 +61,9 @@ struct GameRootView: View {
             progress.registerCompletion(of: chapter)
             viewModel.flashInteractMessage("Chapter complete — progress saved.")
         }
+        .onDisappear {
+            sceneController.teardown()
+        }
     }
 
     private var chapterIntroOverlay: some View {
