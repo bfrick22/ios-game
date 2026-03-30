@@ -122,7 +122,15 @@ enum ChapterRegistry {
                 grantsItemIds: nil
             ),
             craftingWorkstations: nil,
-            combatEnemies: nil,
+            combatEnemies: [
+                CombatEnemyConfig(
+                    id: "hostile.event_practice",
+                    worldPosition: Vector3Config(x: 2.4, y: 0.55, z: 0),
+                    patrolHalfWidth: 0.75,
+                    moveSpeed: 0.95,
+                    maxHealth: 1.0
+                ),
+            ],
             tripwire: nil
         ),
         ChapterConfig(

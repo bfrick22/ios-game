@@ -638,21 +638,28 @@ final class SideScrollSceneController {
 
         let h = Self.capsuleHeight
         let footY = player.position.y - h * 0.5
-        let origin = SIMD3<Float>(player.position.x, footY + 0.08, player.position.z)
+        // Start just above the foot to avoid self-intersection; a bit higher helps when the capsule sinks slightly into the floor.
+        let origin = SIMD3<Float>(player.position.x, footY + 0.09, player.position.z)
         let direction = SIMD3<Float>(0, -1, 0)
+        // `.nearest` returns only one hit; when the origin is inside the player capsule, that hit is the player,
+        // so skipping it leaves no ground. `.all` collects hits along the ray so we can skip self and still hit the floor.
         let hits = scene.raycast(
             origin: origin,
             direction: direction,
-            length: 0.52,
-            query: .nearest,
+            length: 0.95,
+            query: .all,
             mask: .all,
             relativeTo: nil
         )
 
-        for hit in hits {
+        let sorted = hits.sorted { $0.distance < $1.distance }
+        let up = SIMD3<Float>(0, 1, 0)
+        for hit in sorted {
             if isUnderPlayer(hit.entity) { continue }
             let n = hit.normal
-            if simd_dot(n, SIMD3<Float>(0, 1, 0)) > 0.35 {
+            let upwardness = max(simd_dot(n, up), simd_dot(-n, up))
+            // Slightly looser than a pure floor (0.28) so shallow contacts still read as ground after physics jitter.
+            if upwardness > 0.22, hit.distance <= 0.88 {
                 return true
             }
         }
@@ -722,9 +729,10 @@ final class SideScrollSceneController {
         }
 
         guard grounded else { return }
-        if v.y > 0.35 { return }
+        // Ignore small upward bounce so jump still fires when settling on the ground.
+        if v.y > 0.45 { return }
 
-        let deltaVy = 6.2 - v.y
+        let deltaVy = 6.45 - v.y
         player.applyLinearImpulse(SIMD3<Float>(0, Self.playerMass * deltaVy, 0), relativeTo: nil)
     }
 
