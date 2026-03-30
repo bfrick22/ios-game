@@ -43,6 +43,7 @@ final class SideScrollSceneController {
     private let tripwireVisual = ModelEntity()
     private let corridorWallNegZ = Entity()
     private let corridorWallPosZ = Entity()
+    private let prototypeObstacles = Entity()
     private var cameraRig = SideScrollCameraRig()
     private var lastMediaTime: CFTimeInterval?
     /// Scene graph (meshes, hierarchy) built once per controller lifetime.
@@ -108,6 +109,7 @@ final class SideScrollSceneController {
             buildWorkstationProp()
             buildTripwireVisualPlaceholder()
             buildCorridorWalls()
+            buildPrototypeObstacles()
             buildPlayer()
 
             root.addChild(ground)
@@ -119,6 +121,7 @@ final class SideScrollSceneController {
             root.addChild(workstationProp)
             root.addChild(corridorWallNegZ)
             root.addChild(corridorWallPosZ)
+            root.addChild(prototypeObstacles)
             root.addChild(player)
             root.addChild(cameraAnchor)
             cameraAnchor.addChild(perspectiveCamera)
@@ -292,6 +295,61 @@ final class SideScrollSceneController {
 
         corridorWallNegZ.position = SIMD3<Float>(4, 2.5, -halfExtentZ)
         corridorWallPosZ.position = SIMD3<Float>(4, 2.5, halfExtentZ)
+    }
+
+    /// Hard-coded static masses for 2.5D navigation: block straight-ahead X routes but leave a Z lane to pass.
+    private func buildPrototypeObstacles() {
+        prototypeObstacles.name = "Prototype.obstacles"
+
+        let groundTopY: Float = -0.125
+
+        func addStaticMass(
+            name: String,
+            size: SIMD3<Float>,
+            center: SIMD3<Float>,
+            color: UIColor
+        ) {
+            let ent = ModelEntity()
+            ent.name = name
+            ent.model = ModelComponent(
+                mesh: .generateBox(size: size, cornerRadius: 0.02),
+                materials: [SimpleMaterial(color: color, isMetallic: false)]
+            )
+            var p = center
+            p.y = groundTopY + size.y * 0.5
+            ent.position = p
+            ent.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
+            ent.components.set(PhysicsBodyComponent(
+                massProperties: .default,
+                material: playerGroundMaterial,
+                mode: .static
+            ))
+            prototypeObstacles.addChild(ent)
+        }
+
+        // East of spawn: occupies +Z half of the corridor; detour on −Z (avoids ladder x band until lane merge).
+        addStaticMass(
+            name: "Obstacle.wall_segment_near_start",
+            size: SIMD3<Float>(0.88, 2.55, 1.35),
+            center: SIMD3<Float>(3.0, 0, 0.9),
+            color: UIColor(red: 0.34, green: 0.33, blue: 0.32, alpha: 1)
+        )
+
+        // Past the ch.1 hazard strip: blocks −Z; weave toward +Z to reach the go-bag beat.
+        addStaticMass(
+            name: "Obstacle.building_corner_mid",
+            size: SIMD3<Float>(1.05, 2.85, 1.5),
+            center: SIMD3<Float>(7.35, 0, -0.88),
+            color: UIColor(red: 0.30, green: 0.29, blue: 0.27, alpha: 1)
+        )
+
+        // Before exit volume: shallow X depth, offset in +Z; pass on −Z or center-left along X.
+        addStaticMass(
+            name: "Obstacle.abandoned_kiosk",
+            size: SIMD3<Float>(1.15, 2.2, 1.25),
+            center: SIMD3<Float>(9.85, 0, 0.92),
+            color: UIColor(red: 0.36, green: 0.34, blue: 0.31, alpha: 1)
+        )
     }
 
     private func buildLadderVisual() {
