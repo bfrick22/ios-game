@@ -9,56 +9,59 @@ struct GameRootView: View {
     @State private var viewModel = GameSessionViewModel()
     @State private var sceneController = SideScrollSceneController()
     @State private var showChapterIntro = true
+    @State private var inventoryExpanded = false
 
     var body: some View {
-        ZStack {
-            RealityView { content in
-                sceneController.attachIfNeeded(
-                    insertRoot: { content.add($0) },
-                    viewModel: viewModel,
-                    chapter: chapter
-                )
-                content.camera = .virtual
-                content.cameraTarget = sceneController.perspectiveCamera
-            } update: { _ in
-                // Do not run gameplay tick here: `update` only runs when SwiftUI invalidates this view,
-                // so physics/camera would freeze between input changes. The timer below drives simulation.
-            }
-            // RealityKit’s embedded view otherwise wins hit testing; controls must sit above and receive touches.
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(false)
-
-            // Below traversal so the stick and action buttons receive touches; inventory sits under transparent regions.
-            InventoryHUDView(viewModel: viewModel)
-                .padding(.bottom, 96)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-
-            TraversalTouchOverlay(viewModel: viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            if showChapterIntro {
-                chapterIntroOverlay
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(chapter.title)
-                    .font(.caption.weight(.semibold))
-                Text(chapter.objectiveHUDLine)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                statusLine
-                equippedLine
-                if let banner = viewModel.interactBannerText {
-                    Text(banner)
-                        .font(.caption)
-                        .padding(8)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        GeometryReader { geo in
+            let safe = geo.safeAreaInsets
+            let controlBand = Self.controlBandHeight(safeBottom: safe.bottom)
+            ZStack {
+                RealityView { content in
+                    sceneController.attachIfNeeded(
+                        insertRoot: { content.add($0) },
+                        viewModel: viewModel,
+                        chapter: chapter
+                    )
+                    content.camera = .virtual
+                    content.cameraTarget = sceneController.perspectiveCamera
+                } update: { _ in
+                    // Do not run gameplay tick here: `update` only runs when SwiftUI invalidates this view,
+                    // so physics/camera would freeze between input changes. The timer below drives simulation.
                 }
+                // RealityKit’s embedded view otherwise wins hit testing; controls must sit above and receive touches.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+
+                inventoryOverlay(safe: safe, controlBand: controlBand)
+
+                TraversalTouchOverlay(viewModel: viewModel)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if showChapterIntro {
+                    chapterIntroOverlay
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(chapter.title)
+                        .font(.caption.weight(.semibold))
+                    Text(chapter.objectiveHUDLine)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    statusLine
+                    equippedLine
+                    if let banner = viewModel.interactBannerText {
+                        Text(banner)
+                            .font(.caption)
+                            .padding(8)
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding()
+                .allowsHitTesting(false)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding()
-            .allowsHitTesting(false)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onReceive(Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()) { _ in
             guard !showChapterIntro else { return }
             sceneController.tick(viewModel: viewModel)
@@ -67,6 +70,7 @@ struct GameRootView: View {
             CraftingSheetView(viewModel: viewModel)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .onChange(of: viewModel.chapterCompletionToken) { _, _ in
             guard viewModel.chapterCompletionToken > 0 else { return }
             progress.registerCompletion(of: chapter)
@@ -75,6 +79,68 @@ struct GameRootView: View {
         .onDisappear {
             sceneController.teardown()
         }
+    }
+
+    /// Matches `TraversalTouchOverlay` bottom layout (stick column vs action stack) plus a small gap above the strip.
+    private static func controlBandHeight(safeBottom: CGFloat) -> CGFloat {
+        let leftColumn = 160 + safeBottom + 8 + safeBottom * 0.25
+        let rightColumn = 56 + 14 + 56 + 14 + 72 + 12 + safeBottom
+        return max(leftColumn, rightColumn) + 8
+    }
+
+    @ViewBuilder
+    private func inventoryOverlay(safe: EdgeInsets, controlBand: CGFloat) -> some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            Spacer()
+            if inventoryExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Spacer()
+                        Button {
+                            inventoryExpanded = false
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bag.fill")
+                                Text("Bag")
+                                Image(systemName: "chevron.down")
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close inventory")
+                    }
+                    InventoryHUDView(viewModel: viewModel)
+                }
+            } else {
+                HStack {
+                    Spacer()
+                    Button {
+                        inventoryExpanded = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bag.fill")
+                            Text("Bag")
+                            Image(systemName: "chevron.up")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open inventory")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, controlBand)
+        .padding(.leading, safe.leading + 10)
+        .padding(.trailing, safe.trailing + 10)
     }
 
     private var chapterIntroOverlay: some View {
