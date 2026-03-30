@@ -525,11 +525,16 @@ final class SideScrollSceneController {
         }
     }
 
-    private func updatePlayerVisual(deltaTime: Float, viewModel: GameSessionViewModel) {
-        // Face the rig without rotating the physics body. Camera sits at +Z looking at the player along -Z;
-        // authored parts use local +Z as depth. Rotate ±90° so the figure faces ±X (side-scroll travel), not ±Z.
+    /// Rotates only `playerVisualRoot` (child of `player`) so the humanoid faces left/right; the capsule physics body stays unrotated.
+    private func updatePlayerVisualFacing(viewModel: GameSessionViewModel) {
+        // Camera sits at +Z looking at the player along -Z; authored parts use local +Z as depth.
+        // Rotate ±90° so the figure faces ±X (side-scroll travel), not ±Z.
         let facingAngleY: Float = viewModel.facingSign >= 0 ? .pi / 2 : -.pi / 2
         playerVisualRoot.transform.rotation = simd_quatf(angle: facingAngleY, axis: SIMD3<Float>(0, 1, 0))
+    }
+
+    private func updatePlayerVisual(deltaTime: Float, viewModel: GameSessionViewModel) {
+        updatePlayerVisualFacing(viewModel: viewModel)
 
         guard let motion = player.components[PhysicsMotionComponent.self] else { return }
         let v = motion.linearVelocity
