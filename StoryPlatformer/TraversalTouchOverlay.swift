@@ -50,7 +50,7 @@ struct TraversalTouchOverlay: View {
                 .onChanged { value in
                     let maxR: CGFloat = 70
                     var x = Float(value.translation.width / maxR)
-                    var y = Float(-value.translation.height / maxR)
+                    var y = Float(value.translation.height / maxR)
                     let m = hypot(x, y)
                     if m > 1 {
                         x /= m
@@ -76,7 +76,7 @@ struct TraversalTouchOverlay: View {
     private var stickKnobOffset: CGSize {
         let r: CGFloat = 52
         let dx = CGFloat(viewModel.horizontalInput) * r
-        let dy = CGFloat(-viewModel.verticalInput) * r
+        let dy = CGFloat(viewModel.verticalInput) * r
         return CGSize(width: dx, height: dy)
     }
 
