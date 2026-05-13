@@ -35,13 +35,19 @@ final class ThirdPersonSceneController {
     private let root = Entity()
     private let cameraAnchor = Entity()
     private let player = ModelEntity()
-    private let playerVisualRoot = Entity()
-    private let playerTorso = ModelEntity()
-    private let playerHead = ModelEntity()
-    private let playerLeftArm = ModelEntity()
-    private let playerRightArm = ModelEntity()
-    private let playerLeftLeg = ModelEntity()
-    private let playerRightLeg = ModelEntity()
+    private let playerVisualRoot    = Entity()
+    private let playerTorso         = ModelEntity()
+    private let playerHips          = ModelEntity()
+    private let playerHead          = ModelEntity()
+    private let playerFace          = ModelEntity()
+    private let playerLeftShoulder  = Entity()
+    private let playerRightShoulder = Entity()
+    private let playerLeftArm       = ModelEntity()
+    private let playerRightArm      = ModelEntity()
+    private let playerLeftHip       = Entity()
+    private let playerRightHip      = Entity()
+    private let playerLeftLeg       = ModelEntity()
+    private let playerRightLeg      = ModelEntity()
     private let ground = ModelEntity()
     private let interactProp = ModelEntity()
     private let workstationProp = ModelEntity()
@@ -66,6 +72,11 @@ final class ThirdPersonSceneController {
 
     private var locomotionPhase: Float = 0
     private var locomotionBlend: Float = 0
+
+    // Combo attack state: 0=idle, 1=leftJab, 2=rightCross, 3=leftKick
+    private var comboStep: Int = 0
+    private var comboAnimTimer: Float = 0
+    private var comboCanAdvance: Bool = false
 
     private var loadedChapter: ChapterConfig?
     private var loadedWorkstations: [CraftingWorkstationConfig] = []
@@ -222,6 +233,7 @@ final class ThirdPersonSceneController {
         if hazardCooldownRemaining > 0 { hazardCooldownRemaining = max(0, hazardCooldownRemaining - deltaTime) }
         if meleeCooldownRemaining > 0  { meleeCooldownRemaining  = max(0, meleeCooldownRemaining  - deltaTime) }
         if hostileContactCooldown > 0  { hostileContactCooldown  = max(0, hostileContactCooldown  - deltaTime) }
+        updateComboAnimation(deltaTime: deltaTime)
 
         processHazard(viewModel: viewModel)
         updateEnemyPatrol(deltaTime: deltaTime)
@@ -547,58 +559,111 @@ final class ThirdPersonSceneController {
         playerVisualRoot.name = "PlayerVisualRoot"
         if playerVisualRoot.parent == nil { player.addChild(playerVisualRoot) }
 
-        let mat = SimpleMaterial(color: UIColor(red: 0.2, green: 0.45, blue: 0.95, alpha: 1), isMetallic: false)
+        // Two-tone materials: dark tactical suit + skin-tone head + blue visor
+        let suit   = SimpleMaterial(color: UIColor(red: 0.20, green: 0.24, blue: 0.32, alpha: 1), isMetallic: false)
+        let skin   = SimpleMaterial(color: UIColor(red: 0.88, green: 0.73, blue: 0.60, alpha: 1), isMetallic: false)
+        let visor  = SimpleMaterial(color: UIColor(red: 0.08, green: 0.60, blue: 0.95, alpha: 1), isMetallic: true)
 
-        let headRadius = r * 0.55
-        let torsoW = r * 1.55
-        let torsoH = h * 0.50
-        let torsoD = r * 1.05
-        let armRadius = r * 0.22
-        let armLen = h * 0.40
-        let legRadius = r * 0.24
-        let legLen = h * 0.46
+        // ── Dimensions (all multiples of h for consistent proportions) ────────
+        let headW: Float = h * 0.30;  let headH: Float = h * 0.28;  let headD: Float = h * 0.27
+        let headY: Float = h * 0.35
 
+        let torsoW: Float = h * 0.60; let torsoH: Float = h * 0.30; let torsoD: Float = h * 0.25
+        let torsoY: Float = h * 0.07
+
+        let hipsW: Float = h * 0.46;  let hipsH: Float = h * 0.20;  let hipsD: Float = h * 0.24
+        let hipsY: Float = -h * 0.14
+
+        let armW: Float = h * 0.155;  let armH: Float = h * 0.33
+        let legW: Float = h * 0.17;   let legH: Float = h * 0.35
+
+        // Shoulder pivot: top edge of torso, just outside torso half-width
+        let shoulderY: Float = torsoY + torsoH * 0.35
+        let shoulderX: Float = torsoW * 0.50 + armW * 0.10
+
+        // Hip pivot: center of lower torso; legs protrude downward
+        let hipX: Float = hipsW * 0.24
+
+        // ── Head (blocky Roblox-cube shape) ──────────────────────────────────
+        playerHead.name = "PlayerHead"
+        playerHead.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3(headW, headH, headD), cornerRadius: headW * 0.10),
+            materials: [skin]
+        )
+        playerHead.position = SIMD3(0, headY, 0)
+
+        // Face indicator: flat blue visor on the front (−Z face) of the head
+        playerFace.name = "PlayerFace"
+        playerFace.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3(headW * 0.65, headH * 0.45, 0.016)),
+            materials: [visor]
+        )
+        playerFace.position = SIMD3(0, headH * 0.05, -(headD * 0.5 + 0.008))
+
+        // ── Upper torso ───────────────────────────────────────────────────────
         playerTorso.name = "PlayerTorso"
         playerTorso.model = ModelComponent(
-            mesh: .generateBox(size: SIMD3(torsoW, torsoH, torsoD), cornerRadius: min(r * 0.35, torsoW * 0.25)),
-            materials: [mat]
+            mesh: .generateBox(size: SIMD3(torsoW, torsoH, torsoD), cornerRadius: torsoW * 0.06),
+            materials: [suit]
         )
-        playerTorso.position = SIMD3(0, h * 0.60, 0)
+        playerTorso.position = SIMD3(0, torsoY, 0)
 
-        playerHead.name = "PlayerHead"
-        playerHead.model = ModelComponent(mesh: .generateSphere(radius: headRadius), materials: [mat])
-        playerHead.position = SIMD3(0, h * 0.60 + torsoH * 0.58 + headRadius * 1.15, 0)
+        // ── Lower torso / hips ────────────────────────────────────────────────
+        playerHips.name = "PlayerHips"
+        playerHips.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3(hipsW, hipsH, hipsD), cornerRadius: hipsW * 0.06),
+            materials: [suit]
+        )
+        playerHips.position = SIMD3(0, hipsY, 0)
 
+        // ── Shoulder pivot entities (no mesh) ─────────────────────────────────
+        playerLeftShoulder.name  = "LeftShoulder"
+        playerRightShoulder.name = "RightShoulder"
+        playerLeftShoulder.position  = SIMD3(-shoulderX, shoulderY, 0)
+        playerRightShoulder.position = SIMD3( shoulderX, shoulderY, 0)
+
+        // Arms: children of shoulder pivots, hanging DOWN from the joint.
+        // Mesh center at (0, −armH/2, 0) → top of arm at joint, bottom at −armH.
         let armMesh = MeshResource.generateBox(
-            size: SIMD3(armRadius * 2, armLen, armRadius * 2),
-            cornerRadius: armRadius * 0.85
+            size: SIMD3(armW, armH, armW), cornerRadius: armW * 0.35
         )
-        playerLeftArm.name = "PlayerLeftArm"
-        playerLeftArm.model = ModelComponent(mesh: armMesh, materials: [mat])
-        playerLeftArm.position = SIMD3(-(torsoW * 0.62), h * 0.60 + torsoH * 0.25, 0)
-
+        playerLeftArm.name  = "PlayerLeftArm"
         playerRightArm.name = "PlayerRightArm"
-        playerRightArm.model = ModelComponent(mesh: armMesh, materials: [mat])
-        playerRightArm.position = SIMD3( (torsoW * 0.62), h * 0.60 + torsoH * 0.25, 0)
+        playerLeftArm.model  = ModelComponent(mesh: armMesh, materials: [suit])
+        playerRightArm.model = ModelComponent(mesh: armMesh, materials: [suit])
+        playerLeftArm.position  = SIMD3(0, -armH * 0.5, 0)
+        playerRightArm.position = SIMD3(0, -armH * 0.5, 0)
 
+        // ── Hip pivot entities (no mesh) ──────────────────────────────────────
+        playerLeftHip.name  = "LeftHip"
+        playerRightHip.name = "RightHip"
+        playerLeftHip.position  = SIMD3(-hipX, hipsY, 0)
+        playerRightHip.position = SIMD3( hipX, hipsY, 0)
+
+        // Legs: children of hip pivots, hanging DOWN from the joint.
         let legMesh = MeshResource.generateBox(
-            size: SIMD3(legRadius * 2, legLen, legRadius * 2),
-            cornerRadius: legRadius * 0.85
+            size: SIMD3(legW, legH, legW), cornerRadius: legW * 0.25
         )
-        playerLeftLeg.name = "PlayerLeftLeg"
-        playerLeftLeg.model = ModelComponent(mesh: legMesh, materials: [mat])
-        playerLeftLeg.position = SIMD3(-(torsoW * 0.25), h * 0.26, 0)
-
+        playerLeftLeg.name  = "PlayerLeftLeg"
         playerRightLeg.name = "PlayerRightLeg"
-        playerRightLeg.model = ModelComponent(mesh: legMesh, materials: [mat])
-        playerRightLeg.position = SIMD3( (torsoW * 0.25), h * 0.26, 0)
+        playerLeftLeg.model  = ModelComponent(mesh: legMesh, materials: [suit])
+        playerRightLeg.model = ModelComponent(mesh: legMesh, materials: [suit])
+        playerLeftLeg.position  = SIMD3(0, -legH * 0.5, 0)
+        playerRightLeg.position = SIMD3(0, -legH * 0.5, 0)
 
-        if playerTorso.parent    == nil { playerVisualRoot.addChild(playerTorso) }
-        if playerHead.parent     == nil { playerVisualRoot.addChild(playerHead) }
-        if playerLeftArm.parent  == nil { playerVisualRoot.addChild(playerLeftArm) }
-        if playerRightArm.parent == nil { playerVisualRoot.addChild(playerRightArm) }
-        if playerLeftLeg.parent  == nil { playerVisualRoot.addChild(playerLeftLeg) }
-        if playerRightLeg.parent == nil { playerVisualRoot.addChild(playerRightLeg) }
+        // ── Build hierarchy ───────────────────────────────────────────────────
+        if playerFace.parent         == nil { playerHead.addChild(playerFace) }
+        if playerTorso.parent        == nil { playerVisualRoot.addChild(playerTorso) }
+        if playerHips.parent         == nil { playerVisualRoot.addChild(playerHips) }
+        if playerHead.parent         == nil { playerVisualRoot.addChild(playerHead) }
+        if playerLeftShoulder.parent == nil { playerVisualRoot.addChild(playerLeftShoulder) }
+        if playerRightShoulder.parent == nil { playerVisualRoot.addChild(playerRightShoulder) }
+        if playerLeftArm.parent      == nil { playerLeftShoulder.addChild(playerLeftArm) }
+        if playerRightArm.parent     == nil { playerRightShoulder.addChild(playerRightArm) }
+        if playerLeftHip.parent      == nil { playerVisualRoot.addChild(playerLeftHip) }
+        if playerRightHip.parent     == nil { playerVisualRoot.addChild(playerRightHip) }
+        if playerLeftLeg.parent      == nil { playerLeftHip.addChild(playerLeftLeg) }
+        if playerRightLeg.parent     == nil { playerRightHip.addChild(playerRightLeg) }
     }
 
     // MARK: - Combat
@@ -779,6 +844,7 @@ final class ThirdPersonSceneController {
         let v = motion.linearVelocity
         let planarSpeed = simd_length(SIMD2(v.x, v.z))
 
+        // Locomotion blend: ramps up fast, ramps down slower.
         let speedDeadZone: Float = 0.15
         let speedFull: Float     = 2.1
         let targetBlend = min(1, max(0, (planarSpeed - speedDeadZone) / max(0.01, speedFull - speedDeadZone)))
@@ -791,24 +857,51 @@ final class ThirdPersonSceneController {
 
         let s = sin(locomotionPhase)
 
-        let baseTorsoY = Self.capsuleHeight * 0.60
-        playerTorso.position.y = baseTorsoY + (0.03 * locomotionBlend) * abs(s)
+        // Subtle torso bob
+        let h = Self.capsuleHeight
+        let baseTorsoY = h * 0.07
+        playerTorso.position.y = baseTorsoY + (0.025 * locomotionBlend) * abs(s)
 
-        let armAmp: Float = 0.85 * locomotionBlend
-        let legAmp: Float = 1.05 * locomotionBlend
+        // Base locomotion angles driving shoulder/hip PIVOT entities so limbs
+        // swing around the joint rather than their own center.
+        // Sign convention: +X rotation = arm/leg swings backward; −X = forward.
+        // Natural gait: left arm and left leg are out of phase.
+        let armAmp: Float = 0.70 * locomotionBlend
+        let legAmp: Float = 0.90 * locomotionBlend
 
-        playerLeftArm.transform.rotation  = simd_quatf(angle:  armAmp * s, axis: SIMD3(1, 0, 0))
-        playerRightArm.transform.rotation = simd_quatf(angle: -armAmp * s, axis: SIMD3(1, 0, 0))
-        playerLeftLeg.transform.rotation  = simd_quatf(angle: -legAmp * s, axis: SIMD3(1, 0, 0))
-        playerRightLeg.transform.rotation = simd_quatf(angle:  legAmp * s, axis: SIMD3(1, 0, 0))
+        var lShoulderAngle: Float =  armAmp * s
+        var rShoulderAngle: Float = -armAmp * s
+        var lHipAngle:      Float = -legAmp * s
+        var rHipAngle:      Float =  legAmp * s
 
-        if locomotionBlend < 0.01 {
-            let idle = simd_quatf(angle: 0, axis: SIMD3<Float>(1, 0, 0))
-            playerLeftArm.transform.rotation  = idle
-            playerRightArm.transform.rotation = idle
-            playerLeftLeg.transform.rotation  = idle
-            playerRightLeg.transform.rotation = idle
+        // Combo override: replace relevant pivot angle with attack animation.
+        if comboStep > 0 {
+            let peakTimes:  [Int: Float] = [1: 0.07, 2: 0.07, 3: 0.11]
+            let durations:  [Int: Float] = [1: 0.25, 2: 0.25, 3: 0.38]
+            let maxAngles:  [Int: Float] = [1: -1.20, 2: -1.10, 3: -1.50]
+            if let peak = peakTimes[comboStep],
+               let dur  = durations[comboStep],
+               let maxA = maxAngles[comboStep] {
+                let t = comboAnimTimer
+                let raw: Float = t < peak
+                    ? t / peak
+                    : 1.0 - (t - peak) / max(0.001, dur - peak)
+                let curve = max(0, min(1, raw))
+                let angle = maxA * curve
+                switch comboStep {
+                case 1: lShoulderAngle = angle       // left jab: left arm forward
+                case 2: rShoulderAngle = angle       // right cross: right arm forward
+                case 3: lHipAngle      = angle       // left kick: left leg forward
+                default: break
+                }
+            }
         }
+
+        let xAxis = SIMD3<Float>(1, 0, 0)
+        playerLeftShoulder.transform.rotation  = simd_quatf(angle: lShoulderAngle, axis: xAxis)
+        playerRightShoulder.transform.rotation = simd_quatf(angle: rShoulderAngle, axis: xAxis)
+        playerLeftHip.transform.rotation       = simd_quatf(angle: lHipAngle,      axis: xAxis)
+        playerRightHip.transform.rotation      = simd_quatf(angle: rHipAngle,      axis: xAxis)
     }
 
     // MARK: - Enemy / combat
@@ -850,12 +943,24 @@ final class ThirdPersonSceneController {
         guard viewModel.attackRequested else { return }
         viewModel.attackRequested = false
         guard grounded else { return }
-        guard meleeCooldownRemaining <= 0 else { return }
 
-        meleeCooldownRemaining = 0.45
+        if comboStep == 0 {
+            guard meleeCooldownRemaining <= 0 else { return }
+            comboStep = 1
+            comboAnimTimer = 0
+            comboCanAdvance = false
+            applyMeleeDamage(step: 1, viewModel: viewModel)
+        } else if comboCanAdvance && comboStep < 3 {
+            comboStep += 1
+            comboAnimTimer = 0
+            comboCanAdvance = false
+            applyMeleeDamage(step: comboStep, viewModel: viewModel)
+        }
+    }
+
+    private func applyMeleeDamage(step: Int, viewModel: GameSessionViewModel) {
         let dmg = MeleeCombat.strikeDamage(equippedWeaponItemId: viewModel.equippedWeaponItemId)
         let p = player.position
-
         var hit = false
         for i in enemyRuntimes.indices {
             guard enemyRuntimes[i].health > 0 else { continue }
@@ -866,11 +971,38 @@ final class ThirdPersonSceneController {
                 enemyRuntimes[i].entity.isEnabled = false
                 viewModel.flashInteractMessage("Hostile down.")
             } else {
-                viewModel.flashInteractMessage("Solid hit.")
+                viewModel.flashInteractMessage(step == 1 ? "Jab!" : step == 2 ? "Cross!" : "Kick!")
             }
             break
         }
-        if !hit { viewModel.flashInteractMessage("Swing.") }
+        if !hit {
+            let miss = step == 1 ? "Jab." : step == 2 ? "Cross." : "Kick."
+            viewModel.flashInteractMessage(miss)
+        }
+    }
+
+    private func updateComboAnimation(deltaTime: Float) {
+        guard comboStep > 0 else { return }
+        comboAnimTimer += deltaTime
+
+        let stepDuration: Float
+        let windowStart: Float
+        let windowEnd: Float
+        switch comboStep {
+        case 1: stepDuration = 0.25; windowStart = 0.08; windowEnd = 0.22
+        case 2: stepDuration = 0.25; windowStart = 0.08; windowEnd = 0.22
+        case 3: stepDuration = 0.38; windowStart = 0.12; windowEnd = 0.32
+        default: comboStep = 0; comboAnimTimer = 0; return
+        }
+
+        comboCanAdvance = comboAnimTimer >= windowStart && comboAnimTimer <= windowEnd
+
+        if comboAnimTimer >= stepDuration {
+            comboStep = 0
+            comboAnimTimer = 0
+            comboCanAdvance = false
+            meleeCooldownRemaining = 0.35
+        }
     }
 
     private func enemyInMeleeArc(player: SIMD3<Float>, enemy: SIMD3<Float>) -> Bool {
