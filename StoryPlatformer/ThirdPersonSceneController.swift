@@ -672,7 +672,7 @@ final class ThirdPersonSceneController {
         // Update facing vector from movement direction
         if mag > 0.15 {
             let target = SIMD3(moveXZ.x / mag, 0, moveXZ.z / mag)
-            let faceT = min(1, 14 * deltaTime)
+            let faceT = min(1, 6 * deltaTime)
             let blended = playerFacingVector + (target - playerFacingVector) * faceT
             let bMag = simd_length(SIMD2(blended.x, blended.z))
             if bMag > 0.001 {
