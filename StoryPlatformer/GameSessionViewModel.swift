@@ -61,7 +61,7 @@ final class GameSessionViewModel {
     /// Story beats completed this chapter run; gates whitelist recipes (`CraftRecipe.requiredStoryBeatId`).
     private(set) var completedStoryBeatIds: Set<String> = []
 
-    /// Set each frame by `SideScrollSceneController` when the player is in range of a workbench.
+    /// Set each frame by `ThirdPersonSceneController` when the player is in range of a workbench.
     var nearWorkstationId: String?
 
     /// Opened from interact at a crafting workstation.

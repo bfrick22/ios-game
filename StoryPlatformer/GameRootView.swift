@@ -7,7 +7,7 @@ struct GameRootView: View {
     var progress: ChapterProgressViewModel
 
     @State private var viewModel = GameSessionViewModel()
-    @State private var sceneController = SideScrollSceneController()
+    @State private var sceneController = ThirdPersonSceneController()
     @State private var showChapterIntro = true
     @State private var inventoryExpanded = false
 
@@ -206,9 +206,9 @@ private enum IntroCopy {
     static func line(for textId: String) -> String {
         switch textId {
         case "narrative.ch1.intro":
-            return "Lights cut out mid-breath. From the basement you hear the block go quiet — then something in the walls hums wrong."
+            return "The factory grid is still running. Blue neon marks the safe path — red is drone territory. Reach the server room before they lock you out."
         case "narrative.ch2.intro":
-            return "The neighborhood is holding its breath. Streets funnel toward the arterial; you need a clear run before dark."
+            return "The drones are adapting their patrol routes. Find the workbench, craft what you need, and reach the arterial exit."
         default:
             return ""
         }

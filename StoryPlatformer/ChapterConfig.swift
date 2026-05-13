@@ -94,45 +94,64 @@ struct ChapterConfig: Codable, Sendable, Identifiable, Hashable, Equatable {
     var tripwire: TripwireTrapConfig?
 }
 
+// MARK: - Level layout  ─  Futuristic Neo-Tokyo Drone Factory
+//
+// World orientation: player spawns at origin facing -Z.
+// Camera sits at +Z behind the player, looking into the factory.
+//
+// Route overview:
+//   LEFT (X ≈ -13 to -5):  Safe, blue-neon path behind large machinery
+//   CENTER (X ≈ -4 to 4):  Risky, red-neon drone patrol zone
+//   RIGHT (X ≈  5 to 13):  Alt path with some cover, no neon safety markers
+//   Z=-30 chokepoint:       All three routes merge at the security gate
+//   Z=-36 to -50:           Server room corridor → exit
+
 enum ChapterRegistry {
     static let chapters: [ChapterConfig] = [
+        // ── Chapter 1 — The Event (factory intro) ─────────────────────────────
+        // Objective: reach the server room exit at Z ≈ -50.
+        // Hazard: drone patrol zone in the center lane (Z=-9 to -29, X=-4 to 4).
+        // Story beat: hack terminal at security gate (Z≈-34.5).
+        // Enemy: one guard patrolling the server corridor.
         ChapterConfig(
             id: "chapter.event",
             orderIndex: 0,
             title: "The Event",
-            objectiveId: "reach_safe_exit",
+            objectiveId: "reach_server_room",
             narrativeIntroTextId: "narrative.ch1.intro",
-            completionTriggerId: "trigger.home_exit",
-            playerSpawn: Vector3Config(x: 0, y: 0.72, z: 0),
+            completionTriggerId: "trigger.server_exit",
+            playerSpawn: Vector3Config(x: 0, y: 0.55, z: 0),
             completionVolume: AxisAlignedVolumeConfig(
-                min: Vector3Config(x: 10.75, y: 0.02, z: -1.1),
-                max: Vector3Config(x: 12.6, y: 4.0, z: 1.1)
+                min: Vector3Config(x: -5,  y: 0, z: -50),
+                max: Vector3Config(x:  5,  y: 5, z: -46)
             ),
-            objectiveHUDLine: "Reach the exit corridor",
+            objectiveHUDLine: "Reach the server room",
             hazardVolume: AxisAlignedVolumeConfig(
-                min: Vector3Config(x: 5.5, y: 0.28, z: -0.95),
-                max: Vector3Config(x: 7.05, y: 1.12, z: 0.95)
+                min: Vector3Config(x: -4,  y: 0, z: -29),
+                max: Vector3Config(x:  4,  y: 3, z:  -9)
             ),
             storyBeat: ChapterStoryBeatConfig(
                 storyBeatId: StoryBeatIds.ch1GoBag,
-                worldPosition: Vector3Config(x: 8.15, y: 0.55, z: 0),
-                interactPrompt: "Grab go-bag",
-                interactMessage: "You shoulder the bag. Whatever hit the grid, it is not coming back tonight.",
+                worldPosition: Vector3Config(x: -7, y: 0.5, z: -34.5),
+                interactPrompt: "Hack terminal",
+                interactMessage: "Access granted. Server room unlocked — move before the drones recalibrate.",
                 grantsItemId: "item.go_bag",
                 grantsItemIds: nil
             ),
             craftingWorkstations: nil,
             combatEnemies: [
                 CombatEnemyConfig(
-                    id: "hostile.event_practice",
-                    worldPosition: Vector3Config(x: 2.4, y: 0.55, z: 0),
-                    patrolHalfWidth: 0.75,
-                    moveSpeed: 0.95,
+                    id: "hostile.corridor_guard",
+                    worldPosition: Vector3Config(x: 0, y: 0.55, z: -41),
+                    patrolHalfWidth: 4.0,
+                    moveSpeed: 1.1,
                     maxHealth: 1.0
                 ),
             ],
             tripwire: nil
         ),
+        // ── Chapter 2 — The Neighborhood ──────────────────────────────────────
+        // Reuses the same factory geometry; workbench and tripwire added.
         ChapterConfig(
             id: "chapter.neighborhood",
             orderIndex: 1,
@@ -140,18 +159,21 @@ enum ChapterRegistry {
             objectiveId: "escape_to_arterial",
             narrativeIntroTextId: "narrative.ch2.intro",
             completionTriggerId: "trigger.neighborhood_gate",
-            playerSpawn: Vector3Config(x: 5.5, y: 0.72, z: 0),
+            playerSpawn: Vector3Config(x: 0, y: 0.55, z: 0),
             completionVolume: AxisAlignedVolumeConfig(
-                min: Vector3Config(x: 10.75, y: 0.02, z: -1.1),
-                max: Vector3Config(x: 12.6, y: 4.0, z: 1.1)
+                min: Vector3Config(x: -5,  y: 0, z: -50),
+                max: Vector3Config(x:  5,  y: 5, z: -46)
             ),
             objectiveHUDLine: "Reach the arterial exit",
-            hazardVolume: nil,
+            hazardVolume: AxisAlignedVolumeConfig(
+                min: Vector3Config(x: -4,  y: 0, z: -29),
+                max: Vector3Config(x:  4,  y: 3, z:  -9)
+            ),
             storyBeat: ChapterStoryBeatConfig(
                 storyBeatId: StoryBeatIds.ch2RouteMap,
-                worldPosition: Vector3Config(x: 8.15, y: 0.55, z: 0),
-                interactPrompt: "Read route marker",
-                interactMessage: "Chalk arrow points toward the arterial — still no power, still no radios.",
+                worldPosition: Vector3Config(x: -7, y: 0.5, z: -34.5),
+                interactPrompt: "Read route data",
+                interactMessage: "Arterial route confirmed. Grab what you need from the workbench.",
                 grantsItemId: nil,
                 grantsItemIds: [
                     "item.route_map",
@@ -163,25 +185,25 @@ enum ChapterRegistry {
             craftingWorkstations: [
                 CraftingWorkstationConfig(
                     id: "workbench.neighborhood",
-                    worldPosition: Vector3Config(x: 6.2, y: 0.55, z: 0),
+                    worldPosition: Vector3Config(x: 7, y: 0.5, z: -34.5),
                     interactPrompt: "Use workbench"
                 ),
             ],
             combatEnemies: [
                 CombatEnemyConfig(
                     id: "hostile.scavenger_a",
-                    worldPosition: Vector3Config(x: 7.5, y: 0.55, z: 0),
-                    patrolHalfWidth: 0.95,
-                    moveSpeed: 1.15,
+                    worldPosition: Vector3Config(x: 0, y: 0.55, z: -22),
+                    patrolHalfWidth: 3.5,
+                    moveSpeed: 1.2,
                     maxHealth: 1.0
                 ),
             ],
             tripwire: TripwireTrapConfig(
-                armAnchorPosition: Vector3Config(x: 5.95, y: 0.55, z: 0),
-                interactPrompt: "Rig tripwire",
+                armAnchorPosition: Vector3Config(x: -4, y: 0.55, z: -29),
+                interactPrompt: "Rig tripwire at gate post",
                 triggerVolume: AxisAlignedVolumeConfig(
-                    min: Vector3Config(x: 6.88, y: 0.05, z: -0.55),
-                    max: Vector3Config(x: 7.28, y: 1.55, z: 0.55)
+                    min: Vector3Config(x: -2, y: 0, z: -23),
+                    max: Vector3Config(x:  2, y: 2, z: -21)
                 )
             )
         ),

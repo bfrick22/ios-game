@@ -10,8 +10,8 @@
 		B1000001 /* StoryPlatformerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001 /* StoryPlatformerApp.swift */; };
 		B1000002 /* GameRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000002 /* GameRootView.swift */; };
 		B1000003 /* GameSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000003 /* GameSessionViewModel.swift */; };
-		B1000004 /* SideScrollCameraRig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000004 /* SideScrollCameraRig.swift */; };
-		B1000005 /* SideScrollSceneController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000005 /* SideScrollSceneController.swift */; };
+		B1000004 /* ThirdPersonCameraRig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000004 /* ThirdPersonCameraRig.swift */; };
+		B1000005 /* ThirdPersonSceneController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000005 /* ThirdPersonSceneController.swift */; };
 		B1000006 /* TraversalTouchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000006 /* TraversalTouchOverlay.swift */; };
 		B1000007 /* ChapterConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000007 /* ChapterConfig.swift */; };
 		B1000008 /* GameProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000008 /* GameProgress.swift */; };
@@ -29,8 +29,8 @@
 		F1000001 /* StoryPlatformerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryPlatformerApp.swift; sourceTree = "<group>"; };
 		F1000002 /* GameRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameRootView.swift; sourceTree = "<group>"; };
 		F1000003 /* GameSessionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionViewModel.swift; sourceTree = "<group>"; };
-		F1000004 /* SideScrollCameraRig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideScrollCameraRig.swift; sourceTree = "<group>"; };
-		F1000005 /* SideScrollSceneController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideScrollSceneController.swift; sourceTree = "<group>"; };
+		F1000004 /* ThirdPersonCameraRig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThirdPersonCameraRig.swift; sourceTree = "<group>"; };
+		F1000005 /* ThirdPersonSceneController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThirdPersonSceneController.swift; sourceTree = "<group>"; };
 		F1000006 /* TraversalTouchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraversalTouchOverlay.swift; sourceTree = "<group>"; };
 		F1000007 /* ChapterConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterConfig.swift; sourceTree = "<group>"; };
 		F1000008 /* GameProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameProgress.swift; sourceTree = "<group>"; };
@@ -70,8 +70,8 @@
 				F1000001 /* StoryPlatformerApp.swift */,
 				F1000002 /* GameRootView.swift */,
 				F1000003 /* GameSessionViewModel.swift */,
-				F1000004 /* SideScrollCameraRig.swift */,
-				F1000005 /* SideScrollSceneController.swift */,
+				F1000004 /* ThirdPersonCameraRig.swift */,
+				F1000005 /* ThirdPersonSceneController.swift */,
 				F1000006 /* TraversalTouchOverlay.swift */,
 				F1000007 /* ChapterConfig.swift */,
 				F1000008 /* GameProgress.swift */,
@@ -168,8 +168,8 @@
 				B1000001 /* StoryPlatformerApp.swift in Sources */,
 				B1000002 /* GameRootView.swift in Sources */,
 				B1000003 /* GameSessionViewModel.swift in Sources */,
-				B1000004 /* SideScrollCameraRig.swift in Sources */,
-				B1000005 /* SideScrollSceneController.swift in Sources */,
+				B1000004 /* ThirdPersonCameraRig.swift in Sources */,
+				B1000005 /* ThirdPersonSceneController.swift in Sources */,
 				B1000006 /* TraversalTouchOverlay.swift in Sources */,
 				B1000007 /* ChapterConfig.swift in Sources */,
 				B1000008 /* GameProgress.swift in Sources */,
