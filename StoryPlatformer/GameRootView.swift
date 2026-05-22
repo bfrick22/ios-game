@@ -237,7 +237,7 @@ private enum IntroCopy {
     static func line(for textId: String) -> String {
         switch textId {
         case "narrative.tutorial.intro":
-            return "Get a feel for moving. Left stick to run — push gently to walk, fully to sprint. Weave the pillars, jump the live wires, grab the supply cache, and reach the green exit."
+            return "Welcome to the gym. Left stick to run — push gently to walk, fully to sprint. Weave the training dummies, clear the hurdle, grab the supplies, and reach the exit doors."
         case "narrative.ch1.intro":
             return "The factory grid is still running. Blue neon marks the safe path — red is drone territory. Reach the server room before they lock you out."
         case "narrative.ch2.intro":

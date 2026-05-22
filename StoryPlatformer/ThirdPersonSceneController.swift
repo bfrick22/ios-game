@@ -449,35 +449,43 @@ final class ThirdPersonSceneController {
               color: UIColor(red: 0, green: 0.25, blue: 0.12, alpha: 1))
     }
 
-    // MARK: Tutorial level — Training Yard
+    // MARK: Tutorial level — Training Gym
     //
-    // A calm, mostly-flat course built to show off fluid movement:
-    //   Z=0    →  Open plaza: feel acceleration, walk vs sprint, free turning
-    //   Z=-12  →  Slalom pillars: weave to feel responsive turning
-    //   Z=-25  →  Speed lane: open straight to reach top speed and stop clean
-    //   Z=-34  →  Live-wire gate: jump the red hazard strip
-    //   Z=-41  →  Supply cache: interact beat (grants go-bag)
-    //   Z=-49  →  Green exit door: completion trigger
-    //
-    // Color code: GREEN = path / go  |  CYAN = guide / go around  |  RED = hazard  |  AMBER = interact
+    // A big open gym that doubles as a movement course. Same layout/collision as
+    // before, re-skinned with hardwood, court lines, padded walls and gym gear:
+    //   Z=0    →  Warm-up floor: bench, squat rack, cones, medicine balls
+    //   Z=-12  →  Heavy training dummies: weave to feel responsive turning
+    //   Z=-25  →  Sprint lane: open straight to reach top speed and stop clean
+    //   Z=-34  →  Track hurdle: jump it (the red mat underneath still stings)
+    //   Z=-41  →  Supply station: interact beat (grants go-bag)
+    //   Z=-49  →  Gym double-doors w/ EXIT sign: completion trigger
     private func buildTutorialEnvironment() {
-        environmentRoot.name = "TrainingYard"
+        environmentRoot.name = "TrainingGym"
 
-        let wall      = UIColor(red: 0.15, green: 0.17, blue: 0.21, alpha: 1)
-        let pillarCol = UIColor(red: 0.13, green: 0.15, blue: 0.19, alpha: 1)
-        let cyan      = UIColor(red: 0.00, green: 0.70, blue: 1.00, alpha: 1)
-        let green     = UIColor(red: 0.00, green: 1.00, blue: 0.45, alpha: 1)
-        let amber     = UIColor(red: 1.00, green: 0.62, blue: 0.00, alpha: 1)
-        let red       = UIColor(red: 1.00, green: 0.12, blue: 0.08, alpha: 1)
+        // Gym palette
+        let floorWood  = UIColor(red: 0.66, green: 0.48, blue: 0.28, alpha: 1)
+        let wallPaint  = UIColor(red: 0.82, green: 0.80, blue: 0.74, alpha: 1)
+        let stripeBlue = UIColor(red: 0.10, green: 0.32, blue: 0.66, alpha: 1)
+        let stripeRed  = UIColor(red: 0.72, green: 0.16, blue: 0.16, alpha: 1)
+        let line       = UIColor(red: 0.93, green: 0.91, blue: 0.83, alpha: 1)
+        let lineYellow = UIColor(red: 0.95, green: 0.78, blue: 0.10, alpha: 1)
+        let matBlue    = UIColor(red: 0.12, green: 0.34, blue: 0.62, alpha: 1)
+        let matRed     = UIColor(red: 0.66, green: 0.16, blue: 0.16, alpha: 1)
+        let padBlack   = UIColor(red: 0.11, green: 0.11, blue: 0.13, alpha: 1)
+        let metal      = UIColor(red: 0.55, green: 0.57, blue: 0.60, alpha: 1)
+        let wood       = UIColor(red: 0.50, green: 0.35, blue: 0.20, alpha: 1)
+        let orange     = UIColor(red: 1.00, green: 0.50, blue: 0.05, alpha: 1)
+        let green      = UIColor(red: 0.10, green: 0.72, blue: 0.32, alpha: 1)
+        let doorCol    = UIColor(red: 0.20, green: 0.42, blue: 0.34, alpha: 1)
 
-        // Solid block: collision + static physics, bottom resting on Y=0.
+        // Visible box with collision + static physics, bottom resting on Y=0.
         func solid(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ z: Float,
                    _ color: UIColor, metallic: Bool = false) {
             let ent = ModelEntity()
             ent.name = name
             ent.model = ModelComponent(
-                mesh: .generateBox(size: size, cornerRadius: 0.06),
-                materials: [SimpleMaterial(color: color, isMetallic: metallic)]
+                mesh: .generateBox(size: size, cornerRadius: 0.04),
+                materials: [SimpleMaterial(color: color, roughness: 0.85, isMetallic: metallic)]
             )
             ent.position = SIMD3(x, size.y * 0.5, z)
             ent.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
@@ -485,60 +493,160 @@ final class ThirdPersonSceneController {
                                                     material: playerGroundMaterial, mode: .static))
             environmentRoot.addChild(ent)
         }
-        // Decor strip: visual only, no collision. y = exact world Y of center.
-        func strip(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ y: Float, _ z: Float, _ color: UIColor) {
+        // Invisible collider (visuals drawn separately, e.g. round dummies).
+        func collider(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ z: Float) {
+            let ent = ModelEntity()
+            ent.name = name
+            ent.position = SIMD3(x, size.y * 0.5, z)
+            ent.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
+            ent.components.set(PhysicsBodyComponent(massProperties: .default,
+                                                    material: playerGroundMaterial, mode: .static))
+            environmentRoot.addChild(ent)
+        }
+        // Decor box: visual only, matte. y = exact world Y of center.
+        func deco(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ y: Float, _ z: Float,
+                  _ color: UIColor, metallic: Bool = false) {
             let ent = ModelEntity()
             ent.name = name
             ent.model = ModelComponent(
                 mesh: .generateBox(size: size),
-                materials: [SimpleMaterial(color: color, isMetallic: true)]
+                materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: metallic)]
             )
             ent.position = SIMD3(x, y, z)
             environmentRoot.addChild(ent)
         }
-
-        // ── Outer bounds: keep the yard open but contained ────────────────────
-        solid("Wall.L",    SIMD3(0.5, 3, 52), -9, -25, wall)
-        solid("Wall.R",    SIMD3(0.5, 3, 52),  9, -25, wall)
-        solid("Wall.Back", SIMD3(18, 3, 0.5),  0, -50, wall)
-        strip("Trim.L", SIMD3(0.08, 0.12, 50), -8.72, 1.2, -25, cyan)
-        strip("Trim.R", SIMD3(0.08, 0.12, 50),  8.72, 1.2, -25, cyan)
-
-        // ── Center green guide line from plaza to exit ────────────────────────
-        for (i, z) in stride(from: Float(-3), through: Float(-46), by: -3).enumerated() {
-            strip("Guide.\(i)", SIMD3(0.35, 0.04, 1.2), 0, 0.03, z, green)
+        func cyld(_ name: String, _ height: Float, _ radius: Float, _ x: Float, _ y: Float, _ z: Float, _ color: UIColor) {
+            let ent = ModelEntity(mesh: .generateCylinder(height: height, radius: radius),
+                                  materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: false)])
+            ent.name = name
+            ent.position = SIMD3(x, y, z)
+            environmentRoot.addChild(ent)
+        }
+        func sphd(_ name: String, _ radius: Float, _ x: Float, _ y: Float, _ z: Float, _ color: UIColor) {
+            let ent = ModelEntity(mesh: .generateSphere(radius: radius),
+                                  materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: false)])
+            ent.name = name
+            ent.position = SIMD3(x, y, z)
+            environmentRoot.addChild(ent)
+        }
+        func cone(_ name: String, _ height: Float, _ radius: Float, _ x: Float, _ z: Float, _ color: UIColor) {
+            let ent = ModelEntity(mesh: .generateCone(height: height, radius: radius),
+                                  materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: false)])
+            ent.name = name
+            ent.position = SIMD3(x, height * 0.5, z)
+            environmentRoot.addChild(ent)
         }
 
-        // ── Plaza (z 0..-9): open warm-up, two framing posts ──────────────────
-        solid("Post.L", SIMD3(0.6, 2.4, 0.6), -6, -4, pillarCol, metallic: true)
-        solid("Post.R", SIMD3(0.6, 2.4, 0.6),  6, -4, pillarCol, metallic: true)
-        strip("Cap.PostL", SIMD3(0.64, 0.10, 0.64), -6, 2.45, -4, cyan)
-        strip("Cap.PostR", SIMD3(0.64, 0.10, 0.64),  6, 2.45, -4, cyan)
+        // ── Hardwood floor + painted court lines ──────────────────────────────
+        deco("Floor", SIMD3(21.6, 0.04, 50), 0, 0.02, -24.5, floorWood)
+        deco("Court.SideL", SIMD3(0.12, 0.02, 46), -9.5, 0.05, -24, line)
+        deco("Court.SideR", SIMD3(0.12, 0.02, 46),  9.5, 0.05, -24, line)
+        deco("Court.BaseN", SIMD3(19, 0.02, 0.12), 0, 0.05, -1.0, line)
+        deco("Court.BaseF", SIMD3(19, 0.02, 0.12), 0, 0.05, -47.5, line)
+        deco("Court.Half",  SIMD3(19, 0.02, 0.12), 0, 0.05, -24, line)
+        cyld("Court.CircleOut", 0.02, 2.0, 0, 0.045, -24, line)
+        cyld("Court.CircleIn",  0.03, 1.7, 0, 0.05, -24, floorWood)
+        // Green training-circuit line guiding to the exit
+        deco("Circuit", SIMD3(0.16, 0.02, 44), 0, 0.06, -24, green)
 
-        // ── Slalom (z -12..-24): weave to feel the responsive turning ─────────
-        let slalom: [(Float, Float)] = [(-2.6, -12), (2.6, -16), (-2.6, -20), (2.6, -24)]
-        for (i, p) in slalom.enumerated() {
-            solid("Slalom.\(i)", SIMD3(1.0, 2.6, 1.0), p.0, p.1, pillarCol, metallic: true)
-            strip("SlalomCap.\(i)", SIMD3(1.05, 0.10, 1.05), p.0, 2.62, p.1, cyan)
+        // ── Walls: painted, padded base, accent stripes ───────────────────────
+        solid("Wall.L",    SIMD3(0.5, 4, 52), -11, -25, wallPaint)
+        solid("Wall.R",    SIMD3(0.5, 4, 52),  11, -25, wallPaint)
+        solid("Wall.Back", SIMD3(22,  4, 0.5),  0, -50, wallPaint)
+        deco("Pad.L",    SIMD3(0.1, 1.0, 50), -10.74, 0.55, -25, matBlue)
+        deco("Pad.R",    SIMD3(0.1, 1.0, 50),  10.74, 0.55, -25, matBlue)
+        deco("Pad.Back", SIMD3(21.0, 1.0, 0.1), 0, 0.55, -49.74, matBlue)
+        deco("Stripe.L",  SIMD3(0.06, 0.3, 50), -10.72, 2.7, -25, stripeBlue)
+        deco("Stripe.R",  SIMD3(0.06, 0.3, 50),  10.72, 2.7, -25, stripeBlue)
+        deco("StripeR.L", SIMD3(0.06, 0.12, 50), -10.72, 2.3, -25, stripeRed)
+        deco("StripeR.R", SIMD3(0.06, 0.12, 50),  10.72, 2.3, -25, stripeRed)
+        deco("Stripe.Back", SIMD3(21.0, 0.3, 0.06), 0, 2.7, -49.72, stripeBlue)
+
+        // Back-wall banners + a side-wall scoreboard
+        deco("Banner.L", SIMD3(1.4, 2.6, 0.08), -6.5, 2.6, -49.7, stripeRed)
+        deco("Banner.R", SIMD3(1.4, 2.6, 0.08),  6.5, 2.6, -49.7, stripeBlue)
+        deco("Banner.Ltrim", SIMD3(1.1, 0.22, 0.1), -6.5, 3.4, -49.64, line)
+        deco("Banner.Rtrim", SIMD3(1.1, 0.22, 0.1),  6.5, 3.4, -49.64, line)
+        deco("Score.board", SIMD3(0.2, 1.2, 3.2), -10.7, 3.0, -12, padBlack)
+        deco("Score.red",   SIMD3(0.08, 0.5, 1.3), -10.56, 3.0, -12.8, matRed)
+        deco("Score.grn",   SIMD3(0.08, 0.5, 1.3), -10.56, 3.0, -11.2, green)
+
+        // Basketball backboards + rims, high on the side walls
+        deco("Hoop.LBoard", SIMD3(0.12, 1.0, 1.7), -10.72, 3.0, -30, line)
+        deco("Hoop.LRim",   SIMD3(0.5, 0.08, 0.5), -10.25, 2.55, -30, orange)
+        deco("Hoop.RBoard", SIMD3(0.12, 1.0, 1.7),  10.72, 3.0, -20, line)
+        deco("Hoop.RRim",   SIMD3(0.5, 0.08, 0.5),  10.25, 2.55, -20, orange)
+
+        // ── Warm-up floor (z 0..-9): bench, squat rack, cones, med balls ──────
+        // Flat bench (left)
+        collider("Bench.col", SIMD3(0.7, 0.5, 1.8), -6, -4)
+        deco("Bench.seat", SIMD3(0.6, 0.16, 1.7), -6, 0.5, -4, padBlack)
+        deco("Bench.legN", SIMD3(0.5, 0.5, 0.1), -6, 0.25, -4.7, metal)
+        deco("Bench.legF", SIMD3(0.5, 0.5, 0.1), -6, 0.25, -3.3, metal)
+        // Squat rack (right)
+        collider("Rack.colL", SIMD3(0.2, 2.2, 0.2), 5.4, -4)
+        collider("Rack.colR", SIMD3(0.2, 2.2, 0.2), 6.6, -4)
+        deco("Rack.postL", SIMD3(0.16, 2.2, 0.16), 5.4, 1.1, -4, metal)
+        deco("Rack.postR", SIMD3(0.16, 2.2, 0.16), 6.6, 1.1, -4, metal)
+        deco("Rack.bar",   SIMD3(1.9, 0.1, 0.1), 6.0, 1.7, -4, metal)
+        deco("Rack.plateL", SIMD3(0.08, 0.5, 0.5), 5.35, 1.7, -4, padBlack)
+        deco("Rack.plateR", SIMD3(0.08, 0.5, 0.5), 6.65, 1.7, -4, padBlack)
+        // Medicine balls + agility cones
+        sphd("Med.A", 0.22, -4.0, 0.22, -2.2, matRed)
+        sphd("Med.B", 0.22, -3.4, 0.22, -2.8, matBlue)
+        cone("Cone.A", 0.4, 0.18, -1.6, -6, orange)
+        cone("Cone.B", 0.4, 0.18,  1.6, -6, orange)
+        cone("Cone.C", 0.4, 0.18,  0.0, -8, orange)
+
+        // ── Heavy training dummies (z -12..-24): weave course ─────────────────
+        let dummies: [(Float, Float, UIColor)] = [
+            (-2.6, -12, matRed), (2.6, -16, matBlue), (-2.6, -20, matRed), (2.6, -24, matBlue),
+        ]
+        for (i, d) in dummies.enumerated() {
+            collider("Dummy.\(i).col", SIMD3(0.9, 2.0, 0.9), d.0, d.1)
+            cyld("Dummy.\(i).base", 0.14, 0.46, d.0, 0.07, d.1, padBlack)
+            cyld("Dummy.\(i).body", 1.45, 0.32, d.0, 0.92, d.1, d.2)
+            cyld("Dummy.\(i).band", 0.12, 0.34, d.0, 1.18, d.1, line)
+            sphd("Dummy.\(i).head", 0.33, d.0, 1.78, d.1, padBlack)
         }
 
-        // ── Live-wire gate (z ≈ -34.5): jump the red hazard strip ─────────────
+        // ── Sprint lane (z -25..-31): painted lane lines ──────────────────────
+        deco("Lane.L", SIMD3(0.1, 0.02, 7), -1.6, 0.05, -28, lineYellow)
+        deco("Lane.R", SIMD3(0.1, 0.02, 7),  1.6, 0.05, -28, lineYellow)
+
+        // ── Track hurdle (z -34.5): jump it; red mat underneath is the hazard ─
         // Hazard volume + damage are driven by ChapterConfig.hazardVolume.
-        solid("Wire.PostL", SIMD3(0.5, 2.2, 0.5), -3.6, -34.5, pillarCol, metallic: true)
-        solid("Wire.PostR", SIMD3(0.5, 2.2, 0.5),  3.6, -34.5, pillarCol, metallic: true)
-        strip("Wire.Bar",    SIMD3(7.2, 0.10, 0.10), 0, 1.4, -34.5, red)   // visual wires (no collision)
-        strip("Wire.Launch", SIMD3(5.0, 0.04, 0.30), 0, 0.03, -32.6, green)
-        strip("Wire.Land",   SIMD3(5.0, 0.04, 0.30), 0, 0.03, -36.4, green)
+        collider("Hurdle.colL", SIMD3(0.22, 1.1, 0.22), -3.6, -34.5)
+        collider("Hurdle.colR", SIMD3(0.22, 1.1, 0.22),  3.6, -34.5)
+        deco("Hurdle.legL", SIMD3(0.16, 1.1, 0.16), -3.6, 0.55, -34.5, metal)
+        deco("Hurdle.legR", SIMD3(0.16, 1.1, 0.16),  3.6, 0.55, -34.5, metal)
+        deco("Hurdle.bar",  SIMD3(7.2, 0.12, 0.12), 0, 1.0, -34.5, lineYellow)
+        deco("Hurdle.endL", SIMD3(0.9, 0.13, 0.13), -2.9, 1.0, -34.5, padBlack)
+        deco("Hurdle.endR", SIMD3(0.9, 0.13, 0.13),  2.9, 1.0, -34.5, padBlack)
+        deco("Hurdle.runup",   SIMD3(5.0, 0.05, 1.6), 0, 0.03, -32.4, matBlue)
+        deco("Hurdle.landing", SIMD3(5.0, 0.05, 2.0), 0, 0.03, -36.6, matBlue)
 
-        // ── Supply cache pad (z -41): story-beat terminal placed here by config ─
-        strip("Cache.Pad", SIMD3(2.6, 0.04, 2.6), 0, 0.02, -41, amber)
+        // ── Supply station (z -41): story-beat terminal placed here by config ─
+        deco("Cache.Mat", SIMD3(3.0, 0.04, 3.0), 0, 0.02, -41, matBlue)
+        deco("Duffel", SIMD3(1.1, 0.45, 0.55), -1.5, 0.25, -41, stripeRed)
+        deco("Plyo",   SIMD3(0.8, 0.8, 0.8), -1.7, 0.4, -42.3, wood)
+        cyld("Cooler.body", 0.9, 0.22, 1.6, 0.45, -41, stripeBlue)
+        cyld("Cooler.top",  0.12, 0.18, 1.6, 0.96, -41, line)
+        deco("Aid.post",   SIMD3(0.08, 1.2, 0.08), 1.6, 0.6, -40.2, metal)
+        deco("Aid.sign",   SIMD3(0.5, 0.5, 0.06), 1.6, 1.3, -40.2, line)
+        deco("Aid.crossV", SIMD3(0.12, 0.34, 0.08), 1.6, 1.3, -40.16, matRed)
+        deco("Aid.crossH", SIMD3(0.34, 0.12, 0.08), 1.6, 1.3, -40.16, matRed)
 
-        // ── Exit door (z -49.7): green frame = goal ───────────────────────────
-        strip("Door.Top",  SIMD3(6.5, 0.4, 0.5),  0,    3.0, -49.7, green)
-        strip("Door.L",    SIMD3(0.4, 3.2, 0.5), -3.2,  1.6, -49.7, green)
-        strip("Door.R",    SIMD3(0.4, 3.2, 0.5),  3.2,  1.6, -49.7, green)
-        strip("Door.Fill", SIMD3(6.0, 3.0, 0.3),  0,    1.5, -49.75,
-              UIColor(red: 0, green: 0.22, blue: 0.12, alpha: 1))
+        // ── Gym double-doors w/ EXIT sign (z -49.7): the goal ─────────────────
+        deco("Exit.fill",     SIMD3(3.8, 3.0, 0.2), 0, 1.5, -49.82, UIColor(red: 0.05, green: 0.06, blue: 0.07, alpha: 1))
+        deco("Exit.doorL",    SIMD3(1.7, 3.0, 0.12), -0.9, 1.5, -49.68, doorCol)
+        deco("Exit.doorR",    SIMD3(1.7, 3.0, 0.12),  0.9, 1.5, -49.68, doorCol)
+        deco("Exit.handleL",  SIMD3(0.1, 0.8, 0.1), -0.25, 1.4, -49.6, metal)
+        deco("Exit.handleR",  SIMD3(0.1, 0.8, 0.1),  0.25, 1.4, -49.6, metal)
+        deco("Exit.frameTop", SIMD3(4.2, 0.3, 0.25), 0, 3.15, -49.7, metal)
+        deco("Exit.frameL",   SIMD3(0.25, 3.2, 0.25), -2.0, 1.6, -49.7, metal)
+        deco("Exit.frameR",   SIMD3(0.25, 3.2, 0.25),  2.0, 1.6, -49.7, metal)
+        deco("Exit.sign",     SIMD3(1.7, 0.45, 0.12), 0, 3.55, -49.62, green)
     }
 
     private func buildHazardMeshPlaceholder() {

@@ -123,7 +123,7 @@ enum ChapterRegistry {
                 min: Vector3Config(x: -4, y: 0, z: -50),
                 max: Vector3Config(x:  4, y: 5, z: -46)
             ),
-            objectiveHUDLine: "Weave the pillars, jump the wires, grab supplies, reach the exit",
+            objectiveHUDLine: "Weave the dummies, clear the hurdle, grab supplies, reach the exit",
             hazardVolume: AxisAlignedVolumeConfig(
                 min: Vector3Config(x: -3.5, y: 0, z: -35.2),
                 max: Vector3Config(x:  3.5, y: 1.0, z: -33.8)
