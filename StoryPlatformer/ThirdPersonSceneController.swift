@@ -565,17 +565,17 @@ final class ThirdPersonSceneController {
         let visor  = SimpleMaterial(color: UIColor(red: 0.08, green: 0.60, blue: 0.95, alpha: 1), isMetallic: true)
 
         // ── Dimensions (all multiples of h for consistent proportions) ────────
-        let headW: Float = h * 0.30;  let headH: Float = h * 0.28;  let headD: Float = h * 0.27
+        let headW: Float = h * 0.26;  let headH: Float = h * 0.25;  let headD: Float = h * 0.24
         let headY: Float = h * 0.35
 
-        let torsoW: Float = h * 0.60; let torsoH: Float = h * 0.30; let torsoD: Float = h * 0.25
+        let torsoW: Float = h * 0.44; let torsoH: Float = h * 0.28; let torsoD: Float = h * 0.22
         let torsoY: Float = h * 0.07
 
-        let hipsW: Float = h * 0.46;  let hipsH: Float = h * 0.20;  let hipsD: Float = h * 0.24
+        let hipsW: Float = h * 0.38;  let hipsH: Float = h * 0.18;  let hipsD: Float = h * 0.22
         let hipsY: Float = -h * 0.14
 
-        let armW: Float = h * 0.155;  let armH: Float = h * 0.33
-        let legW: Float = h * 0.17;   let legH: Float = h * 0.35
+        let armW: Float = h * 0.10;   let armH: Float = h * 0.40
+        let legW: Float = h * 0.12;   let legH: Float = h * 0.43
 
         // Shoulder pivot: top edge of torso, just outside torso half-width
         let shoulderY: Float = torsoY + torsoH * 0.35
@@ -864,7 +864,7 @@ final class ThirdPersonSceneController {
 
         // Base locomotion angles driving shoulder/hip PIVOT entities so limbs
         // swing around the joint rather than their own center.
-        // Sign convention: +X rotation = arm/leg swings backward; −X = forward.
+        // Sign convention: +X rotation = limb swings forward (toward face/-Z); −X = backward.
         // Natural gait: left arm and left leg are out of phase.
         let armAmp: Float = 0.70 * locomotionBlend
         let legAmp: Float = 0.90 * locomotionBlend
@@ -878,7 +878,7 @@ final class ThirdPersonSceneController {
         if comboStep > 0 {
             let peakTimes:  [Int: Float] = [1: 0.07, 2: 0.07, 3: 0.11]
             let durations:  [Int: Float] = [1: 0.25, 2: 0.25, 3: 0.38]
-            let maxAngles:  [Int: Float] = [1: -1.20, 2: -1.10, 3: -1.50]
+            let maxAngles:  [Int: Float] = [1: 1.20, 2: 1.10, 3: 1.50]
             if let peak = peakTimes[comboStep],
                let dur  = durations[comboStep],
                let maxA = maxAngles[comboStep] {
