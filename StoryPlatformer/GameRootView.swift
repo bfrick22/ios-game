@@ -1,4 +1,4 @@
-import Combine
+import QuartzCore
 import RealityKit
 import SwiftUI
 
@@ -8,6 +8,7 @@ struct GameRootView: View {
 
     @State private var viewModel = GameSessionViewModel()
     @State private var sceneController = ThirdPersonSceneController()
+    @State private var frameClock = FrameClock()
     @State private var showChapterIntro = true
     @State private var inventoryExpanded = false
 
@@ -26,7 +27,7 @@ struct GameRootView: View {
                     content.cameraTarget = sceneController.perspectiveCamera
                 } update: { _ in
                     // Do not run gameplay tick here: `update` only runs when SwiftUI invalidates this view,
-                    // so physics/camera would freeze between input changes. The timer below drives simulation.
+                    // so physics/camera would freeze between input changes. The CADisplayLink below drives simulation.
                 }
                 // RealityKit’s embedded view otherwise wins hit testing; controls must sit above and receive touches.
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -62,9 +63,12 @@ struct GameRootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onReceive(Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()) { _ in
-            guard !showChapterIntro else { return }
-            sceneController.tick(viewModel: viewModel)
+        .onChange(of: showChapterIntro) { _, shown in
+            if shown {
+                frameClock.stop()
+            } else {
+                frameClock.start { sceneController.tick(viewModel: viewModel) }
+            }
         }
         .sheet(isPresented: $viewModel.showCraftingSheet) {
             CraftingSheetView(viewModel: viewModel)
@@ -77,6 +81,7 @@ struct GameRootView: View {
             viewModel.flashInteractMessage("Chapter complete — progress saved.")
         }
         .onDisappear {
+            frameClock.stop()
             sceneController.teardown()
         }
     }
@@ -201,10 +206,38 @@ struct GameRootView: View {
     }
 }
 
+/// Vsync-synced game-loop driver. CADisplayLink fires once per display refresh (60 or 120 Hz),
+/// giving even frame pacing — far smoother than a run-loop `Timer`, which jitters and coalesces.
+@MainActor
+final class FrameClock: NSObject {
+    private var link: CADisplayLink?
+    private var onFrame: (() -> Void)?
+
+    func start(_ onFrame: @escaping () -> Void) {
+        stop()
+        self.onFrame = onFrame
+        let link = CADisplayLink(target: self, selector: #selector(step))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+        onFrame = nil
+    }
+
+    @objc private func step() {
+        onFrame?()
+    }
+}
+
 /// Placeholder narrative until Localizable / string catalog entries exist.
 private enum IntroCopy {
     static func line(for textId: String) -> String {
         switch textId {
+        case "narrative.tutorial.intro":
+            return "Get a feel for moving. Left stick to run — push gently to walk, fully to sprint. Weave the pillars, jump the live wires, grab the supply cache, and reach the green exit."
         case "narrative.ch1.intro":
             return "The factory grid is still running. Blue neon marks the safe path — red is drone territory. Reach the server room before they lock you out."
         case "narrative.ch2.intro":

@@ -108,6 +108,38 @@ struct ChapterConfig: Codable, Sendable, Identifiable, Hashable, Equatable {
 
 enum ChapterRegistry {
     static let chapters: [ChapterConfig] = [
+        // ── Tutorial — Training Yard ──────────────────────────────────────────
+        // Calm, flat course that teaches fluid movement: open plaza, slalom,
+        // speed lane, jump the live-wire hazard, grab a supply cache, reach exit.
+        ChapterConfig(
+            id: "chapter.tutorial",
+            orderIndex: 0,
+            title: "Training",
+            objectiveId: "tutorial_movement",
+            narrativeIntroTextId: "narrative.tutorial.intro",
+            completionTriggerId: "trigger.tutorial_exit",
+            playerSpawn: Vector3Config(x: 0, y: 0.55, z: 0),
+            completionVolume: AxisAlignedVolumeConfig(
+                min: Vector3Config(x: -4, y: 0, z: -50),
+                max: Vector3Config(x:  4, y: 5, z: -46)
+            ),
+            objectiveHUDLine: "Weave the pillars, jump the wires, grab supplies, reach the exit",
+            hazardVolume: AxisAlignedVolumeConfig(
+                min: Vector3Config(x: -3.5, y: 0, z: -35.2),
+                max: Vector3Config(x:  3.5, y: 1.0, z: -33.8)
+            ),
+            storyBeat: ChapterStoryBeatConfig(
+                storyBeatId: "beat.tutorial.supplies",
+                worldPosition: Vector3Config(x: 0, y: 0.5, z: -41),
+                interactPrompt: "Grab supplies",
+                interactMessage: "Supply cache secured. The exit's just ahead — go.",
+                grantsItemId: "item.go_bag",
+                grantsItemIds: nil
+            ),
+            craftingWorkstations: nil,
+            combatEnemies: nil,
+            tripwire: nil
+        ),
         // ── Chapter 1 — The Event (factory intro) ─────────────────────────────
         // Objective: reach the server room exit at Z ≈ -50.
         // Hazard: drone patrol zone in the center lane (Z=-9 to -29, X=-4 to 4).
@@ -115,7 +147,7 @@ enum ChapterRegistry {
         // Enemy: one guard patrolling the server corridor.
         ChapterConfig(
             id: "chapter.event",
-            orderIndex: 0,
+            orderIndex: 1,
             title: "The Event",
             objectiveId: "reach_server_room",
             narrativeIntroTextId: "narrative.ch1.intro",
@@ -154,7 +186,7 @@ enum ChapterRegistry {
         // Reuses the same factory geometry; workbench and tripwire added.
         ChapterConfig(
             id: "chapter.neighborhood",
-            orderIndex: 1,
+            orderIndex: 2,
             title: "The Neighborhood",
             objectiveId: "escape_to_arterial",
             narrativeIntroTextId: "narrative.ch2.intro",

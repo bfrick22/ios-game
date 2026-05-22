@@ -110,7 +110,11 @@ final class ThirdPersonSceneController {
     ) {
         if !sceneGraphBuilt {
             buildGround()
-            buildEnvironment()
+            if chapter.id == "chapter.tutorial" {
+                buildTutorialEnvironment()
+            } else {
+                buildFactoryEnvironment()
+            }
             buildHazardMeshPlaceholder()
             buildCompletionMarkerPlaceholder()
             buildInteractProp()
@@ -281,7 +285,7 @@ final class ThirdPersonSceneController {
     //
     // Neon color code:  BLUE = safe  |  RED = danger / drone zone  |  GREEN = exit direction
 
-    private func buildEnvironment() {
+    private func buildFactoryEnvironment() {
         environmentRoot.name = "DroneFactory"
 
         // Colors
@@ -435,6 +439,98 @@ final class ThirdPersonSceneController {
         // Dark door fill (back wall cutout visual)
         strip(name: "Door.Fill", size: SIMD3(6.0, 5.0, 0.3),   x: 0, y: 2.5, z: -49.75,
               color: UIColor(red: 0, green: 0.25, blue: 0.12, alpha: 1))
+    }
+
+    // MARK: Tutorial level — Training Yard
+    //
+    // A calm, mostly-flat course built to show off fluid movement:
+    //   Z=0    →  Open plaza: feel acceleration, walk vs sprint, free turning
+    //   Z=-12  →  Slalom pillars: weave to feel responsive turning
+    //   Z=-25  →  Speed lane: open straight to reach top speed and stop clean
+    //   Z=-34  →  Live-wire gate: jump the red hazard strip
+    //   Z=-41  →  Supply cache: interact beat (grants go-bag)
+    //   Z=-49  →  Green exit door: completion trigger
+    //
+    // Color code: GREEN = path / go  |  CYAN = guide / go around  |  RED = hazard  |  AMBER = interact
+    private func buildTutorialEnvironment() {
+        environmentRoot.name = "TrainingYard"
+
+        let wall      = UIColor(red: 0.15, green: 0.17, blue: 0.21, alpha: 1)
+        let pillarCol = UIColor(red: 0.13, green: 0.15, blue: 0.19, alpha: 1)
+        let cyan      = UIColor(red: 0.00, green: 0.70, blue: 1.00, alpha: 1)
+        let green     = UIColor(red: 0.00, green: 1.00, blue: 0.45, alpha: 1)
+        let amber     = UIColor(red: 1.00, green: 0.62, blue: 0.00, alpha: 1)
+        let red       = UIColor(red: 1.00, green: 0.12, blue: 0.08, alpha: 1)
+
+        // Solid block: collision + static physics, bottom resting on Y=0.
+        func solid(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ z: Float,
+                   _ color: UIColor, metallic: Bool = false) {
+            let ent = ModelEntity()
+            ent.name = name
+            ent.model = ModelComponent(
+                mesh: .generateBox(size: size, cornerRadius: 0.06),
+                materials: [SimpleMaterial(color: color, isMetallic: metallic)]
+            )
+            ent.position = SIMD3(x, size.y * 0.5, z)
+            ent.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
+            ent.components.set(PhysicsBodyComponent(massProperties: .default,
+                                                    material: playerGroundMaterial, mode: .static))
+            environmentRoot.addChild(ent)
+        }
+        // Decor strip: visual only, no collision. y = exact world Y of center.
+        func strip(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ y: Float, _ z: Float, _ color: UIColor) {
+            let ent = ModelEntity()
+            ent.name = name
+            ent.model = ModelComponent(
+                mesh: .generateBox(size: size),
+                materials: [SimpleMaterial(color: color, isMetallic: true)]
+            )
+            ent.position = SIMD3(x, y, z)
+            environmentRoot.addChild(ent)
+        }
+
+        // ── Outer bounds: keep the yard open but contained ────────────────────
+        solid("Wall.L",    SIMD3(0.5, 3, 52), -9, -25, wall)
+        solid("Wall.R",    SIMD3(0.5, 3, 52),  9, -25, wall)
+        solid("Wall.Back", SIMD3(18, 3, 0.5),  0, -50, wall)
+        strip("Trim.L", SIMD3(0.08, 0.12, 50), -8.72, 1.2, -25, cyan)
+        strip("Trim.R", SIMD3(0.08, 0.12, 50),  8.72, 1.2, -25, cyan)
+
+        // ── Center green guide line from plaza to exit ────────────────────────
+        for (i, z) in stride(from: Float(-3), through: Float(-46), by: -3).enumerated() {
+            strip("Guide.\(i)", SIMD3(0.35, 0.04, 1.2), 0, 0.03, z, green)
+        }
+
+        // ── Plaza (z 0..-9): open warm-up, two framing posts ──────────────────
+        solid("Post.L", SIMD3(0.6, 2.4, 0.6), -6, -4, pillarCol, metallic: true)
+        solid("Post.R", SIMD3(0.6, 2.4, 0.6),  6, -4, pillarCol, metallic: true)
+        strip("Cap.PostL", SIMD3(0.64, 0.10, 0.64), -6, 2.45, -4, cyan)
+        strip("Cap.PostR", SIMD3(0.64, 0.10, 0.64),  6, 2.45, -4, cyan)
+
+        // ── Slalom (z -12..-24): weave to feel the responsive turning ─────────
+        let slalom: [(Float, Float)] = [(-2.6, -12), (2.6, -16), (-2.6, -20), (2.6, -24)]
+        for (i, p) in slalom.enumerated() {
+            solid("Slalom.\(i)", SIMD3(1.0, 2.6, 1.0), p.0, p.1, pillarCol, metallic: true)
+            strip("SlalomCap.\(i)", SIMD3(1.05, 0.10, 1.05), p.0, 2.62, p.1, cyan)
+        }
+
+        // ── Live-wire gate (z ≈ -34.5): jump the red hazard strip ─────────────
+        // Hazard volume + damage are driven by ChapterConfig.hazardVolume.
+        solid("Wire.PostL", SIMD3(0.5, 2.2, 0.5), -3.6, -34.5, pillarCol, metallic: true)
+        solid("Wire.PostR", SIMD3(0.5, 2.2, 0.5),  3.6, -34.5, pillarCol, metallic: true)
+        strip("Wire.Bar",    SIMD3(7.2, 0.10, 0.10), 0, 1.4, -34.5, red)   // visual wires (no collision)
+        strip("Wire.Launch", SIMD3(5.0, 0.04, 0.30), 0, 0.03, -32.6, green)
+        strip("Wire.Land",   SIMD3(5.0, 0.04, 0.30), 0, 0.03, -36.4, green)
+
+        // ── Supply cache pad (z -41): story-beat terminal placed here by config ─
+        strip("Cache.Pad", SIMD3(2.6, 0.04, 2.6), 0, 0.02, -41, amber)
+
+        // ── Exit door (z -49.7): green frame = goal ───────────────────────────
+        strip("Door.Top",  SIMD3(6.5, 0.4, 0.5),  0,    3.0, -49.7, green)
+        strip("Door.L",    SIMD3(0.4, 3.2, 0.5), -3.2,  1.6, -49.7, green)
+        strip("Door.R",    SIMD3(0.4, 3.2, 0.5),  3.2,  1.6, -49.7, green)
+        strip("Door.Fill", SIMD3(6.0, 3.0, 0.3),  0,    1.5, -49.75,
+              UIColor(red: 0, green: 0.22, blue: 0.12, alpha: 1))
     }
 
     private func buildHazardMeshPlaceholder() {
@@ -713,31 +809,60 @@ final class ThirdPersonSceneController {
     // MARK: - Physics / movement
 
     private func applyMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
-        let forwardInput = -viewModel.verticalInput    // drag up = positive = forward
-        let rightInput   =  viewModel.horizontalInput
+        // Raw stick: x = strafe, y = forward (drag up = forward).
+        var stick = SIMD2<Float>(viewModel.horizontalInput, -viewModel.verticalInput)
+        var stickMag = simd_length(stick)
 
+        // Radial dead-zone + smoothstep response curve: gentle pushes give fine
+        // walking control, full pushes give full sprint without a twitchy mid-range.
+        let deadZone: Float = 0.12
+        if stickMag <= deadZone {
+            stick = .zero
+            stickMag = 0
+        } else {
+            let norm   = min(1, (stickMag - deadZone) / (1 - deadZone))
+            let curved = norm * norm * (3 - 2 * norm)   // smoothstep
+            stick = (stick / stickMag) * curved
+            stickMag = curved
+        }
+
+        // Camera-relative move direction on the ground plane.
         let fwd = cameraRig.groundForward
         let rgt = cameraRig.groundRight
-        var moveXZ = fwd * forwardInput + rgt * rightInput
+        var moveXZ = fwd * stick.y + rgt * stick.x
+        let moveMag = simd_length(SIMD2(moveXZ.x, moveXZ.z))
+        if moveMag > 1 { moveXZ /= moveMag }
 
-        let mag = simd_length(SIMD2(moveXZ.x, moveXZ.z))
-        if mag > 1 { moveXZ /= mag }
-
-        let runSpeed: Float = 4.35
-        let accel: Float   = 18
-
+        let runSpeed: Float = 4.6
         guard let motion = player.components[PhysicsMotionComponent.self] else { return }
         let v = motion.linearVelocity
-        let t = min(1, accel * deltaTime)
 
-        let dvX = (moveXZ.x * runSpeed - v.x) * t
-        let dvZ = (moveXZ.z * runSpeed - v.z) * t
+        // Target planar velocity scaled by how far the stick is pushed.
+        let desiredX = moveXZ.x * runSpeed
+        let desiredZ = moveXZ.z * runSpeed
+
+        // Pick a response rate: weighty-but-quick on accelerate, snappier on a
+        // hard direction change, crisp on release. Exponential => framerate-independent.
+        let curSpeed     = simd_length(SIMD2(v.x, v.z))
+        let desiredSpeed = simd_length(SIMD2(desiredX, desiredZ))
+        let rate: Float
+        if stickMag <= 0.001 {
+            rate = 18                       // releasing — stop crisply
+        } else if desiredSpeed < curSpeed {
+            rate = 16                       // turning / easing down
+        } else {
+            rate = 13                       // accelerating
+        }
+        let t = 1 - exp(-rate * deltaTime)
+
+        let dvX = (desiredX - v.x) * t
+        let dvZ = (desiredZ - v.z) * t
         player.applyLinearImpulse(SIMD3(Self.playerMass * dvX, 0, Self.playerMass * dvZ), relativeTo: nil)
 
-        // Update facing vector from movement direction
-        if mag > 0.15 {
-            let target = SIMD3(moveXZ.x / mag, 0, moveXZ.z / mag)
-            let faceT = min(1, 6 * deltaTime)
+        // Rotate the player to face travel direction — quick but smooth.
+        if moveMag > 0.1 {
+            let target = SIMD3(moveXZ.x / moveMag, 0, moveXZ.z / moveMag)
+            let faceT  = 1 - exp(-13 * deltaTime)
             let blended = playerFacingVector + (target - playerFacingVector) * faceT
             let bMag = simd_length(SIMD2(blended.x, blended.z))
             if bMag > 0.001 {
@@ -825,20 +950,21 @@ final class ThirdPersonSceneController {
         viewModel.facingSign = playerFacingVector.x >= 0 ? 1 : -1
     }
 
-    private func updatePlayerVisualFacing() {
+    private func updatePlayerVisualFacing(deltaTime: Float) {
         // Rotate visual root so humanoid faces playerFacingVector in world XZ.
         // angle=0 at facing (0,0,-1); atan2(x, -z) maps facing to Y-rotation angle.
         let angle = atan2(playerFacingVector.x, -playerFacingVector.z)
         let target = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
+        let blend = 1 - exp(-16 * deltaTime)   // framerate-independent turn
         playerVisualRoot.transform.rotation = simd_slerp(
             playerVisualRoot.transform.rotation,
             target,
-            0.22
+            blend
         )
     }
 
     private func updatePlayerVisual(deltaTime: Float, viewModel: GameSessionViewModel) {
-        updatePlayerVisualFacing()
+        updatePlayerVisualFacing(deltaTime: deltaTime)
 
         guard let motion = player.components[PhysicsMotionComponent.self] else { return }
         let v = motion.linearVelocity
@@ -851,7 +977,7 @@ final class ThirdPersonSceneController {
         let blendResponse: Float = targetBlend > locomotionBlend ? 10.5 : 7.5
         locomotionBlend += (targetBlend - locomotionBlend) * min(1, blendResponse * deltaTime)
 
-        let walk = min(1, planarSpeed / 4.35)
+        let walk = min(1, planarSpeed / 4.6)
         let phaseRate = (1.4 + 1.9 * walk) * 2 * Float.pi
         locomotionPhase = fmod(locomotionPhase + phaseRate * deltaTime, 2 * .pi)
 

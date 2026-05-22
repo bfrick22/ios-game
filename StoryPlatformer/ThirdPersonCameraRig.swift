@@ -6,8 +6,8 @@ struct ThirdPersonCameraRig {
     var armLength: Float = 5.2           // closer for enclosed factory spaces
     var pitchAngle: Float = 0.40        // ~23° look-down shows more level floor
     var lookAtOffsetY: Float = 0.85     // look-at point height above player.position.y
-    var positionSmoothSpeed: Float = 9.0
-    var yawFollowSpeed: Float = 2.5     // faster yaw for responsive 3rd-person feel
+    var positionSmoothSpeed: Float = 10.0
+    var yawFollowSpeed: Float = 5.5     // faster yaw for responsive 3rd-person feel
 
     /// Unit XZ vector representing where the camera arm is pointed (player facing direction).
     /// Starts facing -Z so the camera sits at +Z of player, looking -Z into the level.
