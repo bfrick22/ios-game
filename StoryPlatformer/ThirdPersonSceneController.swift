@@ -655,111 +655,144 @@ final class ThirdPersonSceneController {
         playerVisualRoot.name = "PlayerVisualRoot"
         if playerVisualRoot.parent == nil { player.addChild(playerVisualRoot) }
 
-        // Two-tone materials: dark tactical suit + skin-tone head + blue visor
-        let suit   = SimpleMaterial(color: UIColor(red: 0.20, green: 0.24, blue: 0.32, alpha: 1), isMetallic: false)
-        let skin   = SimpleMaterial(color: UIColor(red: 0.88, green: 0.73, blue: 0.60, alpha: 1), isMetallic: false)
-        let visor  = SimpleMaterial(color: UIColor(red: 0.08, green: 0.60, blue: 0.95, alpha: 1), isMetallic: true)
+        let H = Self.capsuleHeight
 
-        // ── Dimensions (all multiples of h for consistent proportions) ────────
-        let headW: Float = h * 0.26;  let headH: Float = h * 0.25;  let headD: Float = h * 0.24
-        let headY: Float = h * 0.35
+        // ── Materials — each maps to a future equippable gear slot ────────────
+        let skin    = SimpleMaterial(color: UIColor(red: 0.86, green: 0.69, blue: 0.55, alpha: 1), roughness: 0.9, isMetallic: false)
+        let shirt   = SimpleMaterial(color: UIColor(red: 0.21, green: 0.26, blue: 0.33, alpha: 1), roughness: 0.55, isMetallic: false) // torso + sleeves
+        let pants   = SimpleMaterial(color: UIColor(red: 0.15, green: 0.17, blue: 0.21, alpha: 1), roughness: 0.7, isMetallic: false)   // legs
+        let boots   = SimpleMaterial(color: UIColor(red: 0.09, green: 0.10, blue: 0.12, alpha: 1), roughness: 0.45, isMetallic: false)  // feet
+        let feature = SimpleMaterial(color: UIColor(red: 0.05, green: 0.06, blue: 0.08, alpha: 1), roughness: 0.3, isMetallic: false)   // eyes / mouth
 
-        let torsoW: Float = h * 0.44; let torsoH: Float = h * 0.28; let torsoD: Float = h * 0.22
-        let torsoY: Float = h * 0.07
+        // Mesh helpers — cylinders/spheres give organic limbs vs. stacked boxes.
+        func cyl(_ height: Float, _ radius: Float, _ m: SimpleMaterial) -> ModelEntity {
+            ModelEntity(mesh: .generateCylinder(height: height, radius: radius), materials: [m])
+        }
+        func sph(_ radius: Float, _ m: SimpleMaterial) -> ModelEntity {
+            ModelEntity(mesh: .generateSphere(radius: radius), materials: [m])
+        }
+        func box(_ size: SIMD3<Float>, _ m: SimpleMaterial, corner: Float = 0.01) -> ModelEntity {
+            ModelEntity(mesh: .generateBox(size: size, cornerRadius: corner), materials: [m])
+        }
 
-        let hipsW: Float = h * 0.38;  let hipsH: Float = h * 0.18;  let hipsD: Float = h * 0.22
-        let hipsY: Float = -h * 0.14
-
-        let armW: Float = h * 0.10;   let armH: Float = h * 0.40
-        let legW: Float = h * 0.12;   let legH: Float = h * 0.43
-
-        // Shoulder pivot: top edge of torso, just outside torso half-width
-        let shoulderY: Float = torsoY + torsoH * 0.35
-        let shoulderX: Float = torsoW * 0.50 + armW * 0.10
-
-        // Hip pivot: center of lower torso; legs protrude downward
-        let hipX: Float = hipsW * 0.24
-
-        // ── Head (blocky Roblox-cube shape) ──────────────────────────────────
-        playerHead.name = "PlayerHead"
-        playerHead.model = ModelComponent(
-            mesh: .generateBox(size: SIMD3(headW, headH, headD), cornerRadius: headW * 0.10),
-            materials: [skin]
-        )
-        playerHead.position = SIMD3(0, headY, 0)
-
-        // Face indicator: flat blue visor on the front (−Z face) of the head
-        playerFace.name = "PlayerFace"
-        playerFace.model = ModelComponent(
-            mesh: .generateBox(size: SIMD3(headW * 0.65, headH * 0.45, 0.016)),
-            materials: [visor]
-        )
-        playerFace.position = SIMD3(0, headH * 0.05, -(headD * 0.5 + 0.008))
-
-        // ── Upper torso ───────────────────────────────────────────────────────
+        // ── Torso: chest (shirt) tapering into pelvis (pants), flattened front-back ──
         playerTorso.name = "PlayerTorso"
-        playerTorso.model = ModelComponent(
-            mesh: .generateBox(size: SIMD3(torsoW, torsoH, torsoD), cornerRadius: torsoW * 0.06),
-            materials: [suit]
-        )
-        playerTorso.position = SIMD3(0, torsoY, 0)
+        playerTorso.model = ModelComponent(mesh: .generateCylinder(height: H * 0.20, radius: H * 0.155), materials: [shirt])
+        playerTorso.position = SIMD3(0, H * 0.105, 0)
+        playerTorso.scale = SIMD3(1.05, 1, 0.72)        // shoulders wider than deep
 
-        // ── Lower torso / hips ────────────────────────────────────────────────
         playerHips.name = "PlayerHips"
-        playerHips.model = ModelComponent(
-            mesh: .generateBox(size: SIMD3(hipsW, hipsH, hipsD), cornerRadius: hipsW * 0.06),
-            materials: [suit]
-        )
-        playerHips.position = SIMD3(0, hipsY, 0)
+        playerHips.model = ModelComponent(mesh: .generateCylinder(height: H * 0.12, radius: H * 0.125), materials: [pants])
+        playerHips.position = SIMD3(0, -H * 0.045, 0)
+        playerHips.scale = SIMD3(1, 1, 0.74)
 
-        // ── Shoulder pivot entities (no mesh) ─────────────────────────────────
+        // ── Neck + head ───────────────────────────────────────────────────────
+        let neck = cyl(H * 0.08, H * 0.05, skin)
+        neck.name = "Neck"
+        neck.position = SIMD3(0, H * 0.245, 0)
+        playerVisualRoot.addChild(neck)
+
+        playerHead.name = "PlayerHead"
+        playerHead.model = ModelComponent(mesh: .generateSphere(radius: H * 0.12), materials: [skin])
+        playerHead.position = SIMD3(0, H * 0.355, 0)
+        playerHead.scale = SIMD3(0.92, 1.0, 0.96)       // slightly narrowed, less ball-like
+
+        // ── Face: eyes, nose, mouth on the front (−Z) of the head ─────────────
+        let frontZ = -H * 0.12 * 0.99
+        for sx in [Float(-1), Float(1)] {
+            let eye = sph(H * 0.024, feature)
+            eye.position = SIMD3(sx * H * 0.045, H * 0.025, frontZ)
+            eye.scale = SIMD3(1, 1, 0.5)                // flatten onto the face
+            playerHead.addChild(eye)
+        }
+        let nose = sph(H * 0.022, skin)
+        nose.position = SIMD3(0, -H * 0.005, frontZ - H * 0.01)
+        nose.scale = SIMD3(0.8, 1.0, 1.3)
+        playerHead.addChild(nose)
+        let mouth = box(SIMD3(H * 0.06, H * 0.014, H * 0.02), feature, corner: H * 0.005)
+        mouth.position = SIMD3(0, -H * 0.05, frontZ)
+        playerHead.addChild(mouth)
+
+        // Head-gear mount (formerly the flat blue visor): masks / helmets attach
+        // here later by setting `.model`. Empty + co-located with head for now.
+        playerFace.name = "HeadGearMount"
+        playerFace.model = nil
+        playerFace.position = .zero
+
+        // ── Arms: shirt sleeves, skin hands (glove slot), slight elbow bend ───
+        let upperArmLen = H * 0.20, rUpper = H * 0.05
+        let foreLen = H * 0.185, rFore = H * 0.04
+
         playerLeftShoulder.name  = "LeftShoulder"
         playerRightShoulder.name = "RightShoulder"
-        playerLeftShoulder.position  = SIMD3(-shoulderX, shoulderY, 0)
-        playerRightShoulder.position = SIMD3( shoulderX, shoulderY, 0)
+        playerLeftShoulder.position  = SIMD3(-H * 0.165, H * 0.20, 0)
+        playerRightShoulder.position = SIMD3( H * 0.165, H * 0.20, 0)
 
-        // Arms: children of shoulder pivots, hanging DOWN from the joint.
-        // Mesh center at (0, −armH/2, 0) → top of arm at joint, bottom at −armH.
-        let armMesh = MeshResource.generateBox(
-            size: SIMD3(armW, armH, armW), cornerRadius: armW * 0.35
-        )
+        func buildArm(shoulder: Entity, upper: ModelEntity) {
+            shoulder.addChild(sph(H * 0.062, shirt))    // deltoid at the joint
+            upper.model = ModelComponent(mesh: .generateCylinder(height: upperArmLen, radius: rUpper), materials: [shirt])
+            upper.position = SIMD3(0, -upperArmLen / 2, 0)
+
+            let elbow = Entity()
+            elbow.position = SIMD3(0, -upperArmLen / 2, 0)
+            elbow.transform.rotation = simd_quatf(angle: 0.18, axis: SIMD3(1, 0, 0)) // relaxed forward bend
+            upper.addChild(elbow)
+            elbow.addChild(sph(H * 0.045, shirt))
+            let fore = cyl(foreLen, rFore, shirt)
+            fore.position = SIMD3(0, -foreLen / 2, 0)
+            elbow.addChild(fore)
+            let hand = box(SIMD3(H * 0.062, H * 0.075, H * 0.05), skin, corner: H * 0.02)
+            hand.position = SIMD3(0, -foreLen - H * 0.03, 0)
+            elbow.addChild(hand)
+        }
         playerLeftArm.name  = "PlayerLeftArm"
         playerRightArm.name = "PlayerRightArm"
-        playerLeftArm.model  = ModelComponent(mesh: armMesh, materials: [suit])
-        playerRightArm.model = ModelComponent(mesh: armMesh, materials: [suit])
-        playerLeftArm.position  = SIMD3(0, -armH * 0.5, 0)
-        playerRightArm.position = SIMD3(0, -armH * 0.5, 0)
+        buildArm(shoulder: playerLeftShoulder, upper: playerLeftArm)
+        buildArm(shoulder: playerRightShoulder, upper: playerRightArm)
 
-        // ── Hip pivot entities (no mesh) ──────────────────────────────────────
+        // ── Legs: pants thigh+shin, boot feet ─────────────────────────────────
+        let thighLen = H * 0.255, rThigh = H * 0.072
+        let shinLen = H * 0.235, rShin = H * 0.055
+
         playerLeftHip.name  = "LeftHip"
         playerRightHip.name = "RightHip"
-        playerLeftHip.position  = SIMD3(-hipX, hipsY, 0)
-        playerRightHip.position = SIMD3( hipX, hipsY, 0)
+        playerLeftHip.position  = SIMD3(-H * 0.085, -H * 0.04, 0)
+        playerRightHip.position = SIMD3( H * 0.085, -H * 0.04, 0)
 
-        // Legs: children of hip pivots, hanging DOWN from the joint.
-        let legMesh = MeshResource.generateBox(
-            size: SIMD3(legW, legH, legW), cornerRadius: legW * 0.25
-        )
+        func buildLeg(hip: Entity, thigh: ModelEntity) {
+            hip.addChild(sph(H * 0.07, pants))          // hip joint
+            thigh.model = ModelComponent(mesh: .generateCylinder(height: thighLen, radius: rThigh), materials: [pants])
+            thigh.position = SIMD3(0, -thighLen / 2, 0)
+
+            let knee = Entity()
+            knee.position = SIMD3(0, -thighLen / 2, 0)
+            thigh.addChild(knee)
+            knee.addChild(sph(H * 0.058, pants))
+            let shin = cyl(shinLen, rShin, pants)
+            shin.position = SIMD3(0, -shinLen / 2, 0)
+            knee.addChild(shin)
+            let foot = box(SIMD3(H * 0.085, H * 0.05, H * 0.17), boots, corner: H * 0.02)
+            foot.position = SIMD3(0, -shinLen - H * 0.02, -H * 0.05) // toe forward (−Z)
+            knee.addChild(foot)
+        }
         playerLeftLeg.name  = "PlayerLeftLeg"
         playerRightLeg.name = "PlayerRightLeg"
-        playerLeftLeg.model  = ModelComponent(mesh: legMesh, materials: [suit])
-        playerRightLeg.model = ModelComponent(mesh: legMesh, materials: [suit])
-        playerLeftLeg.position  = SIMD3(0, -legH * 0.5, 0)
-        playerRightLeg.position = SIMD3(0, -legH * 0.5, 0)
+        buildLeg(hip: playerLeftHip, thigh: playerLeftLeg)
+        buildLeg(hip: playerRightHip, thigh: playerRightLeg)
 
-        // ── Build hierarchy ───────────────────────────────────────────────────
-        if playerFace.parent         == nil { playerHead.addChild(playerFace) }
-        if playerTorso.parent        == nil { playerVisualRoot.addChild(playerTorso) }
-        if playerHips.parent         == nil { playerVisualRoot.addChild(playerHips) }
-        if playerHead.parent         == nil { playerVisualRoot.addChild(playerHead) }
-        if playerLeftShoulder.parent == nil { playerVisualRoot.addChild(playerLeftShoulder) }
-        if playerRightShoulder.parent == nil { playerVisualRoot.addChild(playerRightShoulder) }
-        if playerLeftArm.parent      == nil { playerLeftShoulder.addChild(playerLeftArm) }
-        if playerRightArm.parent     == nil { playerRightShoulder.addChild(playerRightArm) }
-        if playerLeftHip.parent      == nil { playerVisualRoot.addChild(playerLeftHip) }
-        if playerRightHip.parent     == nil { playerVisualRoot.addChild(playerRightHip) }
-        if playerLeftLeg.parent      == nil { playerLeftHip.addChild(playerLeftLeg) }
-        if playerRightLeg.parent     == nil { playerRightHip.addChild(playerRightLeg) }
+        // ── Assemble onto the animated visual root ────────────────────────────
+        playerVisualRoot.addChild(playerTorso)
+        playerVisualRoot.addChild(playerHips)
+        playerVisualRoot.addChild(playerHead)
+        playerHead.addChild(playerFace)
+        playerVisualRoot.addChild(playerLeftShoulder)
+        playerVisualRoot.addChild(playerRightShoulder)
+        playerLeftShoulder.addChild(playerLeftArm)
+        playerRightShoulder.addChild(playerRightArm)
+        playerVisualRoot.addChild(playerLeftHip)
+        playerVisualRoot.addChild(playerRightHip)
+        playerLeftHip.addChild(playerLeftLeg)
+        playerRightHip.addChild(playerRightLeg)
     }
 
     // MARK: - Combat
@@ -985,7 +1018,7 @@ final class ThirdPersonSceneController {
 
         // Subtle torso bob
         let h = Self.capsuleHeight
-        let baseTorsoY = h * 0.07
+        let baseTorsoY = h * 0.105
         playerTorso.position.y = baseTorsoY + (0.025 * locomotionBlend) * abs(s)
 
         // Base locomotion angles driving shoulder/hip PIVOT entities so limbs
