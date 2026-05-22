@@ -75,6 +75,9 @@ final class ThirdPersonSceneController {
     private var locomotionPhase: Float = 0
     private var locomotionBlend: Float = 0
 
+    /// Low-pass-filtered stick vector (x = strafe, y = forward); smooths touch jitter.
+    private var smoothedStick: SIMD2<Float> = .zero
+
     // Combo attack state: 0=idle, 1=leftJab, 2=rightCross, 3=leftKick
     private var comboStep: Int = 0
     private var comboAnimTimer: Float = 0
@@ -865,10 +868,15 @@ final class ThirdPersonSceneController {
             stickMag = curved
         }
 
+        // Low-pass the stick so a jittery thumb doesn't yank the heading around.
+        // Drives both movement and facing, so direction stays stable frame to frame.
+        smoothedStick += (stick - smoothedStick) * (1 - exp(-20 * deltaTime))
+        let inputMag = simd_length(smoothedStick)
+
         // Camera-relative move direction on the ground plane.
         let fwd = cameraRig.groundForward
         let rgt = cameraRig.groundRight
-        var moveXZ = fwd * stick.y + rgt * stick.x
+        var moveXZ = fwd * smoothedStick.y + rgt * smoothedStick.x
         let moveMag = simd_length(SIMD2(moveXZ.x, moveXZ.z))
         if moveMag > 1 { moveXZ /= moveMag }
 
@@ -898,15 +906,21 @@ final class ThirdPersonSceneController {
         let dvZ = (desiredZ - v.z) * t
         player.applyLinearImpulse(SIMD3(Self.playerMass * dvX, 0, Self.playerMass * dvZ), relativeTo: nil)
 
-        // Rotate the player to face travel direction — quick but smooth.
-        if moveMag > 0.1 {
-            let target = SIMD3(moveXZ.x / moveMag, 0, moveXZ.z / moveMag)
-            let faceT  = 1 - exp(-13 * deltaTime)
-            let blended = playerFacingVector + (target - playerFacingVector) * faceT
-            let bMag = simd_length(SIMD2(blended.x, blended.z))
-            if bMag > 0.001 {
-                playerFacingVector = SIMD3(blended.x / bMag, 0, blended.z / bMag)
-            }
+        // Turn toward travel direction at a CAPPED angular rate so the character
+        // can't pirouette, and only when the push is deliberate (not stick jitter).
+        if inputMag > 0.2, moveMag > 0.001 {
+            let targetAngle  = atan2(moveXZ.x, -moveXZ.z)
+            let currentAngle = atan2(playerFacingVector.x, -playerFacingVector.z)
+            let raw   = targetAngle - currentAngle
+            let delta = atan2(sin(raw), cos(raw))     // shortest signed turn, wrapped to ±π
+
+            let maxTurn: Float  = 4.5                  // rad/s ceiling (~258°/s) — calm, deliberate
+            let turnEase: Float = 10                   // smooth approach for small corrections
+            let eased = delta * min(1, turnEase * deltaTime)
+            let step  = max(-maxTurn * deltaTime, min(maxTurn * deltaTime, eased))
+
+            let newAngle = currentAngle + step
+            playerFacingVector = SIMD3(sin(newAngle), 0, -cos(newAngle))
         }
     }
 
@@ -936,6 +950,7 @@ final class ThirdPersonSceneController {
         }
 
         playerFacingVector = SIMD3(0, 0, -1)
+        smoothedStick = .zero
         cameraRig = ThirdPersonCameraRig()
         cameraRig.reset(playerPosition: player.position)
         perspectiveCamera.transform = cameraRig.step(
