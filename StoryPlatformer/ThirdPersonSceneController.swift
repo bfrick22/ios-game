@@ -44,6 +44,8 @@ final class ThirdPersonSceneController {
     private let playerRightShoulder = Entity()
     private let playerLeftArm       = ModelEntity()
     private let playerRightArm      = ModelEntity()
+    private let playerLeftElbow     = Entity()
+    private let playerRightElbow    = Entity()
     private let playerLeftHip       = Entity()
     private let playerRightHip      = Entity()
     private let playerLeftLeg       = ModelEntity()
@@ -92,6 +94,9 @@ final class ThirdPersonSceneController {
     private static let capsuleHeight: Float = 1.15 * 0.70
     private static let capsuleRadius: Float = 0.32 * 0.70
     private static let playerMass: Float = 70
+
+    /// Relaxed forward elbow bend at rest; punches straighten toward `elbowExtended`.
+    private static let elbowRestBend: Float = 0.18
 
     private lazy var playerGroundMaterial: PhysicsMaterialResource = {
         PhysicsMaterialResource.generate(friction: 0.95, restitution: 0)
@@ -728,14 +733,13 @@ final class ThirdPersonSceneController {
         playerLeftShoulder.position  = SIMD3(-H * 0.165, H * 0.20, 0)
         playerRightShoulder.position = SIMD3( H * 0.165, H * 0.20, 0)
 
-        func buildArm(shoulder: Entity, upper: ModelEntity) {
+        func buildArm(shoulder: Entity, upper: ModelEntity, elbow: Entity) {
             shoulder.addChild(sph(H * 0.062, shirt))    // deltoid at the joint
             upper.model = ModelComponent(mesh: .generateCylinder(height: upperArmLen, radius: rUpper), materials: [shirt])
             upper.position = SIMD3(0, -upperArmLen / 2, 0)
 
-            let elbow = Entity()
             elbow.position = SIMD3(0, -upperArmLen / 2, 0)
-            elbow.transform.rotation = simd_quatf(angle: 0.18, axis: SIMD3(1, 0, 0)) // relaxed forward bend
+            elbow.transform.rotation = simd_quatf(angle: Self.elbowRestBend, axis: SIMD3(1, 0, 0))
             upper.addChild(elbow)
             elbow.addChild(sph(H * 0.045, shirt))
             let fore = cyl(foreLen, rFore, shirt)
@@ -747,8 +751,10 @@ final class ThirdPersonSceneController {
         }
         playerLeftArm.name  = "PlayerLeftArm"
         playerRightArm.name = "PlayerRightArm"
-        buildArm(shoulder: playerLeftShoulder, upper: playerLeftArm)
-        buildArm(shoulder: playerRightShoulder, upper: playerRightArm)
+        playerLeftElbow.name  = "LeftElbow"
+        playerRightElbow.name = "RightElbow"
+        buildArm(shoulder: playerLeftShoulder, upper: playerLeftArm, elbow: playerLeftElbow)
+        buildArm(shoulder: playerRightShoulder, upper: playerRightArm, elbow: playerRightElbow)
 
         // ── Legs: pants thigh+shin, boot feet ─────────────────────────────────
         let thighLen = H * 0.255, rThigh = H * 0.072
@@ -1032,25 +1038,58 @@ final class ThirdPersonSceneController {
         var rShoulderAngle: Float = -armAmp * s
         var lHipAngle:      Float = -legAmp * s
         var rHipAngle:      Float =  legAmp * s
+        var lElbowAngle:    Float = Self.elbowRestBend
+        var rElbowAngle:    Float = Self.elbowRestBend
 
-        // Combo override: replace relevant pivot angle with attack animation.
+        // Combo override: keyframed chamber → thrust → recover so the fist loads
+        // back (elbow flexed near the shoulder) then snaps straight forward.
+        // Jab = quick lead snap; cross = deeper load + fuller rear-hand drive.
+        // `durations` must match updateComboAnimation's stepDuration per step.
         if comboStep > 0 {
-            let peakTimes:  [Int: Float] = [1: 0.07, 2: 0.07, 3: 0.11]
-            let durations:  [Int: Float] = [1: 0.25, 2: 0.25, 3: 0.38]
-            let maxAngles:  [Int: Float] = [1: 1.20, 2: 1.10, 3: 1.50]
-            if let peak = peakTimes[comboStep],
-               let dur  = durations[comboStep],
-               let maxA = maxAngles[comboStep] {
-                let t = comboAnimTimer
-                let raw: Float = t < peak
-                    ? t / peak
-                    : 1.0 - (t - peak) / max(0.001, dur - peak)
-                let curve = max(0, min(1, raw))
-                let angle = maxA * curve
+            let durations: [Int: Float] = [1: 0.26, 2: 0.36, 3: 0.38]
+            if let dur = durations[comboStep] {
+                let tn = max(0, min(1, comboAnimTimer / dur))
+                let rest = Self.elbowRestBend
+
+                // Keyframes: (normalizedTime, shoulderAngle, elbowAngle).
+                let jab: [(Float, Float, Float)] = [
+                    (0.00, 0.00, rest),
+                    (0.26, 0.95, 1.30),    // chamber: guard up, fist cocked at the shoulder
+                    (0.44, 1.45, -0.05),   // thrust: arm horizontal, elbow snaps straight
+                    (0.62, 1.28, 0.12),
+                    (1.00, 0.00, rest),
+                ]
+                let cross: [(Float, Float, Float)] = [
+                    (0.00, 0.00, rest),
+                    (0.32, 0.55, 1.55),    // deeper chamber: fist drawn further back, loaded
+                    (0.52, 1.62, -0.14),   // bigger thrust, full extension through the centerline
+                    (0.68, 1.42, 0.05),
+                    (1.00, 0.00, rest),
+                ]
+
+                func sample(_ keys: [(Float, Float, Float)]) -> (Float, Float) {
+                    for i in 1 ..< keys.count where tn <= keys[i].0 {
+                        let a = keys[i - 1], b = keys[i]
+                        let u = (tn - a.0) / max(0.0001, b.0 - a.0)
+                        let e = u * u * (3 - 2 * u)   // smoothstep for snappy ease
+                        return (a.1 + (b.1 - a.1) * e, a.2 + (b.2 - a.2) * e)
+                    }
+                    return (keys[keys.count - 1].1, keys[keys.count - 1].2)
+                }
+
                 switch comboStep {
-                case 1: lShoulderAngle = angle       // left jab: left arm forward
-                case 2: rShoulderAngle = angle       // right cross: right arm forward
-                case 3: lHipAngle      = angle       // left kick: left leg forward
+                case 1:
+                    let (sh, el) = sample(jab)
+                    lShoulderAngle = sh; lElbowAngle = el
+                case 2:
+                    let (sh, el) = sample(cross)
+                    rShoulderAngle = sh; rElbowAngle = el
+                case 3: // left front kick — simple thrust, legs unchanged
+                    let peak: Float = 0.11
+                    let raw: Float = comboAnimTimer < peak
+                        ? comboAnimTimer / peak
+                        : 1 - (comboAnimTimer - peak) / max(0.001, dur - peak)
+                    lHipAngle = 1.5 * max(0, min(1, raw))
                 default: break
                 }
             }
@@ -1059,6 +1098,8 @@ final class ThirdPersonSceneController {
         let xAxis = SIMD3<Float>(1, 0, 0)
         playerLeftShoulder.transform.rotation  = simd_quatf(angle: lShoulderAngle, axis: xAxis)
         playerRightShoulder.transform.rotation = simd_quatf(angle: rShoulderAngle, axis: xAxis)
+        playerLeftElbow.transform.rotation     = simd_quatf(angle: lElbowAngle,    axis: xAxis)
+        playerRightElbow.transform.rotation    = simd_quatf(angle: rElbowAngle,    axis: xAxis)
         playerLeftHip.transform.rotation       = simd_quatf(angle: lHipAngle,      axis: xAxis)
         playerRightHip.transform.rotation      = simd_quatf(angle: rHipAngle,      axis: xAxis)
     }
@@ -1148,9 +1189,9 @@ final class ThirdPersonSceneController {
         let windowStart: Float
         let windowEnd: Float
         switch comboStep {
-        case 1: stepDuration = 0.25; windowStart = 0.08; windowEnd = 0.22
-        case 2: stepDuration = 0.25; windowStart = 0.08; windowEnd = 0.22
-        case 3: stepDuration = 0.38; windowStart = 0.12; windowEnd = 0.32
+        case 1: stepDuration = 0.26; windowStart = 0.10; windowEnd = 0.24   // jab: quick
+        case 2: stepDuration = 0.36; windowStart = 0.16; windowEnd = 0.34   // cross: heavier
+        case 3: stepDuration = 0.38; windowStart = 0.12; windowEnd = 0.32   // kick
         default: comboStep = 0; comboAnimTimer = 0; return
         }
 
