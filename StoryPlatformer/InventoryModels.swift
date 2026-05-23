@@ -6,6 +6,22 @@ enum ItemCategory: String, Codable, Sendable, Hashable {
     case medical
     case supply
     case mission
+    case apparel
+}
+
+/// Equippable apparel slots; each maps to a region of the player rig.
+enum GearSlot: String, Codable, Sendable, Hashable {
+    case shirt   // torso + sleeves
+    case pants   // legs
+    case gloves  // hands
+    case mask    // head-gear mount
+}
+
+/// UIKit-free color for designer data; converted to a material at build time.
+struct RGBColor: Sendable, Hashable, Equatable {
+    var r: Float
+    var g: Float
+    var b: Float
 }
 
 /// Designer-facing item metadata; resolve `use` / equip / consume in `GameSessionViewModel`.
@@ -22,6 +38,10 @@ struct ItemDefinition: Sendable, Hashable, Equatable {
     var missionUseMessage: String?
     /// Weapon: damage per grounded melee strike (normalized 0…1 vs enemy).
     var meleeDamage: Float?
+    /// Apparel: which rig slot this equips to.
+    var gearSlot: GearSlot? = nil
+    /// Apparel: color applied to the slot's parts (or the mask mesh).
+    var gearColor: RGBColor? = nil
 }
 
 struct InventoryStack: Sendable, Hashable, Equatable {
@@ -136,6 +156,55 @@ enum ItemCatalog {
             healFraction: nil,
             missionUseMessage: nil,
             meleeDamage: 0.3
+        ),
+        // ── Apparel (equippable; recolors the matching rig parts) ─────────────
+        "item.work_shirt": ItemDefinition(
+            id: "item.work_shirt",
+            displayName: "Work shirt",
+            category: .apparel,
+            maxStack: 1,
+            systemImageName: "tshirt.fill",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: nil,
+            gearSlot: .shirt,
+            gearColor: RGBColor(r: 0.20, g: 0.46, b: 0.55)
+        ),
+        "item.cargo_pants": ItemDefinition(
+            id: "item.cargo_pants",
+            displayName: "Cargo pants",
+            category: .apparel,
+            maxStack: 1,
+            systemImageName: "figure.walk",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: nil,
+            gearSlot: .pants,
+            gearColor: RGBColor(r: 0.42, g: 0.40, b: 0.26)
+        ),
+        "item.work_gloves": ItemDefinition(
+            id: "item.work_gloves",
+            displayName: "Work gloves",
+            category: .apparel,
+            maxStack: 1,
+            systemImageName: "hand.raised.fill",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: nil,
+            gearSlot: .gloves,
+            gearColor: RGBColor(r: 0.30, g: 0.18, b: 0.10)
+        ),
+        "item.balaclava": ItemDefinition(
+            id: "item.balaclava",
+            displayName: "Balaclava",
+            category: .apparel,
+            maxStack: 1,
+            systemImageName: "theatermasks.fill",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: nil,
+            gearSlot: .mask,
+            gearColor: RGBColor(r: 0.09, g: 0.09, b: 0.11)
         ),
     ]
 }

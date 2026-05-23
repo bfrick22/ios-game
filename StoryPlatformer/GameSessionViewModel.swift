@@ -35,6 +35,9 @@ final class GameSessionViewModel {
     /// Tool selection (flashlight, etc.) for future interact/lighting.
     private(set) var equippedToolItemId: String?
 
+    /// Equipped apparel by slot (slot → itemId); drives the player rig's look.
+    private(set) var equippedApparel: [GearSlot: String] = [:]
+
     var equippedWeaponSummary: String? {
         guard let id = equippedWeaponItemId, let def = ItemCatalog.definition(for: id), def.category == .weapon else { return nil }
         return def.displayName
@@ -309,6 +312,19 @@ final class GameSessionViewModel {
                 flashInteractMessage("Stowed \(def.displayName).")
             } else {
                 equippedToolItemId = stack.itemId
+                flashInteractMessage("Equipped \(def.displayName).")
+            }
+
+        case .apparel:
+            guard let slot = def.gearSlot else {
+                flashInteractMessage("Can't wear that.")
+                return
+            }
+            if equippedApparel[slot] == stack.itemId {
+                equippedApparel[slot] = nil
+                flashInteractMessage("Removed \(def.displayName).")
+            } else {
+                equippedApparel[slot] = stack.itemId
                 flashInteractMessage("Equipped \(def.displayName).")
             }
 

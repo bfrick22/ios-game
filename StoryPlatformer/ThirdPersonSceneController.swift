@@ -125,6 +125,12 @@ final class ThirdPersonSceneController {
     /// Low-pass-filtered stick vector (x = strafe, y = forward); smooths touch jitter.
     private var smoothedStick: SIMD2<Float> = .zero
 
+    /// Player-rig parts grouped by gear slot so equipped apparel can recolor them.
+    private var shirtParts: [ModelEntity] = []
+    private var pantsParts: [ModelEntity] = []
+    private var handParts: [ModelEntity] = []
+    private var lastAppliedApparel: [GearSlot: String]?
+
     // Combo attack state: 0=idle, 1=leftJab, 2=rightCross, 3=leftKick
     private var comboStep: Int = 0
     private var comboAnimTimer: Float = 0
@@ -147,6 +153,11 @@ final class ThirdPersonSceneController {
 
     /// Relaxed forward elbow bend at rest; punches straighten toward `elbowExtended`.
     private static let elbowRestBend: Float = 0.18
+
+    /// Default body colors (worn when no apparel is equipped in that slot).
+    private static let defaultShirtColor = UIColor(red: 0.21, green: 0.26, blue: 0.33, alpha: 1)
+    private static let defaultPantsColor = UIColor(red: 0.15, green: 0.17, blue: 0.21, alpha: 1)
+    private static let defaultSkinColor  = UIColor(red: 0.86, green: 0.69, blue: 0.55, alpha: 1)
 
     private lazy var playerGroundMaterial: PhysicsMaterialResource = {
         PhysicsMaterialResource.generate(friction: 0.95, restitution: 0)
@@ -287,6 +298,8 @@ final class ThirdPersonSceneController {
             viewModel.pendingCameraYaw = 0
             viewModel.pendingCameraPitch = 0
         }
+
+        applyApparelIfChanged(viewModel)
 
         // Conversation is modal: freeze control, only advance the dialog + camera.
         if viewModel.activeDialog != nil {
@@ -865,10 +878,15 @@ final class ThirdPersonSceneController {
 
         let H = Self.capsuleHeight
 
-        // ── Materials — each maps to a future equippable gear slot ────────────
-        let skin    = SimpleMaterial(color: UIColor(red: 0.86, green: 0.69, blue: 0.55, alpha: 1), roughness: 0.9, isMetallic: false)
-        let shirt   = SimpleMaterial(color: UIColor(red: 0.21, green: 0.26, blue: 0.33, alpha: 1), roughness: 0.55, isMetallic: false) // torso + sleeves
-        let pants   = SimpleMaterial(color: UIColor(red: 0.15, green: 0.17, blue: 0.21, alpha: 1), roughness: 0.7, isMetallic: false)   // legs
+        // Reset gear-slot part collections (buildPlayer runs once per scene).
+        shirtParts.removeAll()
+        pantsParts.removeAll()
+        handParts.removeAll()
+
+        // ── Materials — each maps to an equippable gear slot (see applyApparel) ─
+        let skin    = SimpleMaterial(color: Self.defaultSkinColor, roughness: 0.9, isMetallic: false)
+        let shirt   = SimpleMaterial(color: Self.defaultShirtColor, roughness: 0.55, isMetallic: false) // torso + sleeves
+        let pants   = SimpleMaterial(color: Self.defaultPantsColor, roughness: 0.7, isMetallic: false)  // legs
         let boots   = SimpleMaterial(color: UIColor(red: 0.09, green: 0.10, blue: 0.12, alpha: 1), roughness: 0.45, isMetallic: false)  // feet
         let feature = SimpleMaterial(color: UIColor(red: 0.05, green: 0.06, blue: 0.08, alpha: 1), roughness: 0.3, isMetallic: false)   // eyes / mouth
 
@@ -888,11 +906,13 @@ final class ThirdPersonSceneController {
         playerTorso.model = ModelComponent(mesh: .generateCylinder(height: H * 0.20, radius: H * 0.155), materials: [shirt])
         playerTorso.position = SIMD3(0, H * 0.105, 0)
         playerTorso.scale = SIMD3(1.05, 1, 0.72)        // shoulders wider than deep
+        shirtParts.append(playerTorso)
 
         playerHips.name = "PlayerHips"
         playerHips.model = ModelComponent(mesh: .generateCylinder(height: H * 0.12, radius: H * 0.125), materials: [pants])
         playerHips.position = SIMD3(0, -H * 0.045, 0)
         playerHips.scale = SIMD3(1, 1, 0.74)
+        pantsParts.append(playerHips)
 
         // ── Neck + head ───────────────────────────────────────────────────────
         let neck = cyl(H * 0.08, H * 0.05, skin)
@@ -925,7 +945,7 @@ final class ThirdPersonSceneController {
         // here later by setting `.model`. Empty + co-located with head for now.
         playerFace.name = "HeadGearMount"
         playerFace.model = nil
-        playerFace.position = .zero
+        playerFace.position = SIMD3(0, H * 0.02, 0)   // eye-level on the head; a mask band mounts here
 
         // ── Arms: shirt sleeves, skin hands (glove slot), slight elbow bend ───
         let upperArmLen = H * 0.20, rUpper = H * 0.05
@@ -937,20 +957,27 @@ final class ThirdPersonSceneController {
         playerRightShoulder.position = SIMD3( H * 0.165, H * 0.20, 0)
 
         func buildArm(shoulder: Entity, upper: ModelEntity, elbow: Entity) {
-            shoulder.addChild(sph(H * 0.062, shirt))    // deltoid at the joint
+            let deltoid = sph(H * 0.062, shirt)         // deltoid at the joint
+            shoulder.addChild(deltoid)
+            shirtParts.append(deltoid)
             upper.model = ModelComponent(mesh: .generateCylinder(height: upperArmLen, radius: rUpper), materials: [shirt])
             upper.position = SIMD3(0, -upperArmLen / 2, 0)
+            shirtParts.append(upper)
 
             elbow.position = SIMD3(0, -upperArmLen / 2, 0)
             elbow.transform.rotation = simd_quatf(angle: Self.elbowRestBend, axis: SIMD3(1, 0, 0))
             upper.addChild(elbow)
-            elbow.addChild(sph(H * 0.045, shirt))
+            let elbowJoint = sph(H * 0.045, shirt)
+            elbow.addChild(elbowJoint)
+            shirtParts.append(elbowJoint)
             let fore = cyl(foreLen, rFore, shirt)
             fore.position = SIMD3(0, -foreLen / 2, 0)
             elbow.addChild(fore)
+            shirtParts.append(fore)
             let hand = box(SIMD3(H * 0.062, H * 0.075, H * 0.05), skin, corner: H * 0.02)
             hand.position = SIMD3(0, -foreLen - H * 0.03, 0)
             elbow.addChild(hand)
+            handParts.append(hand)
         }
         playerLeftArm.name  = "PlayerLeftArm"
         playerRightArm.name = "PlayerRightArm"
@@ -969,17 +996,23 @@ final class ThirdPersonSceneController {
         playerRightHip.position = SIMD3( H * 0.085, -H * 0.04, 0)
 
         func buildLeg(hip: Entity, thigh: ModelEntity) {
-            hip.addChild(sph(H * 0.07, pants))          // hip joint
+            let hipJoint = sph(H * 0.07, pants)          // hip joint
+            hip.addChild(hipJoint)
+            pantsParts.append(hipJoint)
             thigh.model = ModelComponent(mesh: .generateCylinder(height: thighLen, radius: rThigh), materials: [pants])
             thigh.position = SIMD3(0, -thighLen / 2, 0)
+            pantsParts.append(thigh)
 
             let knee = Entity()
             knee.position = SIMD3(0, -thighLen / 2, 0)
             thigh.addChild(knee)
-            knee.addChild(sph(H * 0.058, pants))
+            let kneeJoint = sph(H * 0.058, pants)
+            knee.addChild(kneeJoint)
+            pantsParts.append(kneeJoint)
             let shin = cyl(shinLen, rShin, pants)
             shin.position = SIMD3(0, -shinLen / 2, 0)
             knee.addChild(shin)
+            pantsParts.append(shin)
             let foot = box(SIMD3(H * 0.085, H * 0.05, H * 0.17), boots, corner: H * 0.02)
             foot.position = SIMD3(0, -shinLen - H * 0.02, -H * 0.05) // toe forward (−Z)
             knee.addChild(foot)
@@ -1002,6 +1035,43 @@ final class ThirdPersonSceneController {
         playerVisualRoot.addChild(playerRightHip)
         playerLeftHip.addChild(playerLeftLeg)
         playerRightHip.addChild(playerRightLeg)
+    }
+
+    // MARK: - Apparel / gear
+
+    /// Re-skins the rig when equipped apparel changes (diffed so it's cheap per tick).
+    private func applyApparelIfChanged(_ viewModel: GameSessionViewModel) {
+        let current = viewModel.equippedApparel
+        if let last = lastAppliedApparel, last == current { return }
+        lastAppliedApparel = current
+
+        recolor(shirtParts, gearColor(current[.shirt], fallback: Self.defaultShirtColor), roughness: 0.55)
+        recolor(pantsParts, gearColor(current[.pants], fallback: Self.defaultPantsColor), roughness: 0.7)
+        recolor(handParts, gearColor(current[.gloves], fallback: Self.defaultSkinColor), roughness: 0.9)
+        applyMask(itemId: current[.mask])
+    }
+
+    private func gearColor(_ itemId: String?, fallback: UIColor) -> UIColor {
+        guard let id = itemId, let c = ItemCatalog.definition(for: id)?.gearColor else { return fallback }
+        return UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: 1)
+    }
+
+    private func recolor(_ parts: [ModelEntity], _ color: UIColor, roughness: Float) {
+        let mat = SimpleMaterial(color: color, roughness: MaterialScalarParameter(floatLiteral: roughness), isMetallic: false)
+        for p in parts { p.model?.materials = [mat] }
+    }
+
+    private func applyMask(itemId: String?) {
+        guard let id = itemId, let c = ItemCatalog.definition(for: id)?.gearColor else {
+            playerFace.model = nil
+            return
+        }
+        let H = Self.capsuleHeight
+        let color = UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: 1)
+        playerFace.model = ModelComponent(
+            mesh: .generateBox(size: SIMD3(H * 0.26, H * 0.10, H * 0.26), cornerRadius: H * 0.03),
+            materials: [SimpleMaterial(color: color, roughness: 0.5, isMetallic: false)]
+        )
     }
 
     // MARK: - Combat

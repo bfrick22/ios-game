@@ -161,9 +161,15 @@ enum ChapterRegistry {
                 storyBeatId: "beat.tutorial.supplies",
                 worldPosition: Vector3Config(x: 0, y: 0.5, z: -41),
                 interactPrompt: "Grab supplies",
-                interactMessage: "Supply cache secured. The exit's just ahead — go.",
-                grantsItemId: "item.go_bag",
-                grantsItemIds: nil
+                interactMessage: "Supply cache secured — fresh gear inside. Open your bag to equip it.",
+                grantsItemId: nil,
+                grantsItemIds: [
+                    "item.go_bag",
+                    "item.work_shirt",
+                    "item.cargo_pants",
+                    "item.work_gloves",
+                    "item.balaclava",
+                ]
             ),
             craftingWorkstations: nil,
             // No-dialog hostile: a sparring bot you can simply attack.
