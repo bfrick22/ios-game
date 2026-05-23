@@ -62,6 +62,33 @@ struct TripwireTrapConfig: Codable, Sendable, Hashable, Equatable {
     var triggerVolume: AxisAlignedVolumeConfig
 }
 
+/// One branching dialog option. Choices are remembered (`DialogChoiceConfig.id`)
+/// for later narrative consequences; `turnsHostile` makes an NPC attack after picking it.
+struct DialogChoiceConfig: Codable, Sendable, Hashable, Equatable {
+    var id: String
+    var label: String
+    /// NPC's reply shown after the choice is picked.
+    var response: String
+    /// Enemy-dialog only: choosing this converts the NPC into a hostile.
+    var turnsHostile: Bool
+}
+
+/// An interactable character. Friendlies cannot be attacked and always offer dialog;
+/// enemies may offer dialog (a choice can turn them hostile) or be hostile-only.
+struct NPCConfig: Codable, Sendable, Hashable, Identifiable, Equatable {
+    var id: String
+    var displayName: String
+    var isFriendly: Bool
+    var worldPosition: Vector3Config
+    var interactPrompt: String
+    var openingLine: String
+    var choices: [DialogChoiceConfig]
+    /// Combat stats applied if a `turnsHostile` choice is picked.
+    var combatMaxHealth: Float?
+    var combatMoveSpeed: Float?
+    var patrolHalfWidth: Float?
+}
+
 /// Hand-authored chapter metadata: objective id, spawn, completion trigger id, narrative text ids.
 struct ChapterConfig: Codable, Sendable, Identifiable, Hashable, Equatable {
     /// Stable id for saves and routing (e.g. `chapter.event`).
@@ -92,6 +119,8 @@ struct ChapterConfig: Codable, Sendable, Identifiable, Hashable, Equatable {
     var combatEnemies: [CombatEnemyConfig]?
     /// Optional tripwire: anchor interact + trigger volume.
     var tripwire: TripwireTrapConfig?
+    /// Optional interactable characters (friendlies + dialog enemies).
+    var npcs: [NPCConfig]? = nil
 }
 
 // MARK: - Level layout  ─  Futuristic Neo-Tokyo Drone Factory
@@ -137,8 +166,55 @@ enum ChapterRegistry {
                 grantsItemIds: nil
             ),
             craftingWorkstations: nil,
-            combatEnemies: nil,
-            tripwire: nil
+            // No-dialog hostile: a sparring bot you can simply attack.
+            combatEnemies: [
+                CombatEnemyConfig(
+                    id: "hostile.sparring_bot",
+                    worldPosition: Vector3Config(x: 4, y: 0.55, z: -29),
+                    patrolHalfWidth: 2.5,
+                    moveSpeed: 1.1,
+                    maxHealth: 1.0
+                ),
+            ],
+            tripwire: nil,
+            npcs: [
+                // Friendly trainer — always dialog, never attackable.
+                NPCConfig(
+                    id: "npc.trainer_maya",
+                    displayName: "Maya",
+                    isFriendly: true,
+                    worldPosition: Vector3Config(x: 3.5, y: 0, z: -5),
+                    interactPrompt: "Talk to Maya",
+                    openingLine: "New here? Follow the green line. Want the quick rundown?",
+                    choices: [
+                        DialogChoiceConfig(id: "yes", label: "Yes",
+                            response: "Weave the dummies, clear the hurdle, grab supplies, hit the exit. Go.",
+                            turnsHostile: false),
+                        DialogChoiceConfig(id: "no", label: "No",
+                            response: "Suit yourself. Yell if you need me.",
+                            turnsHostile: false),
+                    ],
+                    combatMaxHealth: nil, combatMoveSpeed: nil, patrolHalfWidth: nil
+                ),
+                // Dialog enemy — a choice can turn this one hostile.
+                NPCConfig(
+                    id: "npc.drifter",
+                    displayName: "Drifter",
+                    isFriendly: false,
+                    worldPosition: Vector3Config(x: -3.5, y: 0, z: -27),
+                    interactPrompt: "Confront the drifter",
+                    openingLine: "That pack yours? Hand it over and we're fine.",
+                    choices: [
+                        DialogChoiceConfig(id: "back_off", label: "Back off",
+                            response: "Wrong answer.",
+                            turnsHostile: true),
+                        DialogChoiceConfig(id: "stay_calm", label: "Stay calm",
+                            response: "...Smart. Get moving.",
+                            turnsHostile: false),
+                    ],
+                    combatMaxHealth: 1.0, combatMoveSpeed: 1.2, patrolHalfWidth: 2.0
+                ),
+            ]
         ),
         // ── Chapter 1 — The Event (factory intro) ─────────────────────────────
         // Objective: reach the server room exit at Z ≈ -50.

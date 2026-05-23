@@ -1,6 +1,21 @@
 import Foundation
 import Observation
 
+/// One selectable line in the dialog UI.
+struct DialogChoiceVM: Identifiable, Equatable {
+    let id: String
+    let label: String
+}
+
+/// Active conversation shown by the dialog overlay. `choices` is empty while showing
+/// an NPC's response (the UI then offers a single "Leave" button).
+struct DialogState: Equatable {
+    let npcId: String
+    let speaker: String
+    var line: String
+    var choices: [DialogChoiceVM]
+}
+
 /// Session state for the active play segment; gameplay systems read/write plain Swift data here.
 @Observable
 @MainActor
@@ -40,6 +55,12 @@ final class GameSessionViewModel {
 
     var interactRequested: Bool = false
 
+    /// Camera orbit deltas (radians) from the right-side look pad; consumed + zeroed each tick.
+    var pendingCameraYaw: Float = 0
+    var pendingCameraPitch: Float = 0
+    /// True while the player is dragging the look pad (suppresses camera auto-recenter).
+    var isLookingActive: Bool = false
+
     /// Set by the scene each frame from horizontal input; melee strikes forward on this axis (±1).
     var facingSign: Float = 1
 
@@ -67,6 +88,13 @@ final class GameSessionViewModel {
     /// Opened from interact at a crafting workstation.
     var showCraftingSheet: Bool = false
 
+    /// Active NPC conversation; non-nil shows the dialog overlay and pauses control.
+    var activeDialog: DialogState?
+    /// Set by the dialog UI when a choice is tapped; consumed by the scene controller.
+    var pendingDialogChoiceId: String?
+    /// Set by the dialog UI's "Leave" button; consumed by the scene controller.
+    var dialogCloseRequested: Bool = false
+
     func notifyChapterCompleted() {
         chapterCompletionToken += 1
     }
@@ -82,6 +110,9 @@ final class GameSessionViewModel {
         showCraftingSheet = false
         resetChapterCompletionSignal()
         attackRequested = false
+        activeDialog = nil
+        pendingDialogChoiceId = nil
+        dialogCloseRequested = false
     }
 
     func applyDamageFromHostile(normalizedAmount: Float) {

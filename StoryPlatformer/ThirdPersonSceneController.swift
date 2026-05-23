@@ -17,13 +17,24 @@ private struct AxisAlignedRegion {
 
 private struct EnemyRuntime {
     let configId: String
-    let entity: ModelEntity
+    let entity: Entity            // moved along X for patrol (box hostile or converted NPC root)
+    let flashBody: ModelEntity?   // material-flashed white on hit
+    let flashColor: UIColor       // base color the flash returns to
     var health: Float
     let patrolMinX: Float
     let patrolMaxX: Float
     var velocitySign: Float
     let speed: Float
     var flash: Float = 0          // 0…1 white hit-flash, decays after a strike
+}
+
+/// An interactable character runtime (friendly or dialog enemy).
+private struct NPCRuntime {
+    let id: String
+    let config: NPCConfig
+    let root: Entity
+    let torso: ModelEntity        // flashed when converted to a hostile
+    let bodyColor: UIColor
 }
 
 /// Short-lived impact burst (expanding spark) spawned at a strike contact point.
@@ -90,6 +101,13 @@ final class ThirdPersonSceneController {
     private var tripwireRegion: AxisAlignedRegion?
     private var meleeCooldownRemaining: Float = 0
     private var hostileContactCooldown: Float = 0
+
+    /// Interactable NPCs (friendlies + dialog enemies), and dialog bookkeeping.
+    private var npcRuntimes: [NPCRuntime] = []
+    private var nearestNPCId: String?
+    private var pendingHostileNPCId: String?
+    /// Remembered dialog choices (npcId → choiceId) for later narrative consequences.
+    private var npcChoices: [String: String] = [:]
 
     /// Strike-feedback state: impact bursts, strikable dummies, and touch haptics.
     private var impactEffects: [ImpactEffect] = []
@@ -191,6 +209,7 @@ final class ThirdPersonSceneController {
         let id = signposter.makeSignpostID()
         let state = signposter.beginInterval("chapter_scene_teardown", id: id)
         removeAllCombatEntities()
+        removeAllNPCs()
         root.removeFromParent()
         attachedToScene = false
         lastMediaTime = nil
@@ -240,6 +259,7 @@ final class ThirdPersonSceneController {
         }
 
         rebuildCombat(from: chapter)
+        rebuildNPCs(from: chapter)
         resetPlayerAtSpawn(chapter.playerSpawn.simd, viewModel: viewModel)
     }
 
@@ -260,6 +280,25 @@ final class ThirdPersonSceneController {
         lastMediaTime = now
 
         guard deltaTime > 0, deltaTime < 0.25 else { return }
+
+        // Apply look-pad camera orbit (consume the accumulated drag deltas).
+        if viewModel.pendingCameraYaw != 0 || viewModel.pendingCameraPitch != 0 {
+            cameraRig.applyLook(yawDelta: viewModel.pendingCameraYaw, pitchDelta: viewModel.pendingCameraPitch)
+            viewModel.pendingCameraYaw = 0
+            viewModel.pendingCameraPitch = 0
+        }
+
+        // Conversation is modal: freeze control, only advance the dialog + camera.
+        if viewModel.activeDialog != nil {
+            processDialog(viewModel: viewModel)
+            perspectiveCamera.transform = cameraRig.step(
+                deltaTime: deltaTime,
+                playerPosition: player.position,
+                playerFacing: playerFacingVector,
+                autoRecenter: false
+            )
+            return
+        }
 
         viewModel.isClimbing = false
         applyMovement(viewModel: viewModel, deltaTime: deltaTime)
@@ -289,10 +328,17 @@ final class ThirdPersonSceneController {
         updateStrikeDummies(deltaTime)
         updateImpactEffects(deltaTime)
 
+        // Auto-recenter the camera behind the player only when running and not looking.
+        let planarSpeed = simd_length(SIMD2(
+            player.components[PhysicsMotionComponent.self]?.linearVelocity.x ?? 0,
+            player.components[PhysicsMotionComponent.self]?.linearVelocity.z ?? 0
+        ))
+        let autoRecenter = planarSpeed > 0.6 && !viewModel.isLookingActive
         perspectiveCamera.transform = cameraRig.step(
             deltaTime: deltaTime,
             playerPosition: player.position,
-            playerFacing: playerFacingVector
+            playerFacing: playerFacingVector,
+            autoRecenter: autoRecenter
         )
     }
 
@@ -993,6 +1039,8 @@ final class ThirdPersonSceneController {
         enemyRuntimes.append(EnemyRuntime(
             configId: config.id,
             entity: ent,
+            flashBody: ent,
+            flashColor: Self.enemyColor,
             health: config.maxHealth,
             patrolMinX: base.x - config.patrolHalfWidth,
             patrolMaxX: base.x + config.patrolHalfWidth,
@@ -1002,32 +1050,148 @@ final class ThirdPersonSceneController {
         root.addChild(ent)
     }
 
+    // MARK: - NPCs / dialog
+
+    private func removeAllNPCs() {
+        for npc in npcRuntimes { npc.root.removeFromParent() }
+        npcRuntimes.removeAll()
+        nearestNPCId = nil
+        pendingHostileNPCId = nil
+    }
+
+    private func rebuildNPCs(from chapter: ChapterConfig) {
+        removeAllNPCs()
+        npcChoices.removeAll()
+        for config in chapter.npcs ?? [] { appendNPC(from: config) }
+    }
+
+    private func appendNPC(from config: NPCConfig) {
+        let accent = config.isFriendly
+            ? UIColor(red: 0.20, green: 0.78, blue: 0.45, alpha: 1)   // green = friendly
+            : UIColor(red: 0.85, green: 0.22, blue: 0.18, alpha: 1)   // red = hostile-capable
+        let skin  = UIColor(red: 0.84, green: 0.66, blue: 0.52, alpha: 1)
+        let shirt = config.isFriendly
+            ? UIColor(red: 0.22, green: 0.34, blue: 0.46, alpha: 1)
+            : UIColor(red: 0.30, green: 0.22, blue: 0.20, alpha: 1)
+        let pants = UIColor(red: 0.16, green: 0.17, blue: 0.20, alpha: 1)
+
+        let root = Entity()
+        root.name = "NPC.\(config.id)"
+        root.position = config.worldPosition.simd
+        // Face roughly toward the player's entry (+Z).
+        root.transform.rotation = simd_quatf(angle: .pi, axis: SIMD3(0, 1, 0))
+
+        func part(_ mesh: MeshResource, _ color: UIColor, _ pos: SIMD3<Float>, scaleZ: Float = 1) -> ModelEntity {
+            let e = ModelEntity(mesh: mesh, materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: false)])
+            e.position = pos
+            if scaleZ != 1 { e.scale = SIMD3(1, 1, scaleZ) }
+            root.addChild(e)
+            return e
+        }
+        _ = part(.generateCylinder(height: 0.42, radius: 0.07), pants, SIMD3(-0.09, 0.21, 0))
+        _ = part(.generateCylinder(height: 0.42, radius: 0.07), pants, SIMD3( 0.09, 0.21, 0))
+        let torso = part(.generateCylinder(height: 0.42, radius: 0.16), shirt, SIMD3(0, 0.62, 0), scaleZ: 0.7)
+        _ = part(.generateCylinder(height: 0.10, radius: 0.165), accent, SIMD3(0, 0.70, 0), scaleZ: 0.72)
+        _ = part(.generateCylinder(height: 0.40, radius: 0.05), shirt, SIMD3(-0.21, 0.60, 0))
+        _ = part(.generateCylinder(height: 0.40, radius: 0.05), shirt, SIMD3( 0.21, 0.60, 0))
+        _ = part(.generateSphere(radius: 0.12), skin, SIMD3(0, 0.95, 0))
+        _ = part(.generateSphere(radius: 0.07), accent, SIMD3(0, 1.22, 0))   // floating friend/foe tag
+
+        // Solid collider so the player bumps into people rather than walking through.
+        let col = ModelEntity()
+        col.position = SIMD3(0, 0.5, 0)
+        col.components.set(CollisionComponent(shapes: [.generateBox(size: SIMD3(0.5, 1.0, 0.4))]))
+        col.components.set(PhysicsBodyComponent(massProperties: .default, material: playerGroundMaterial, mode: .static))
+        root.addChild(col)
+
+        self.root.addChild(root)
+        npcRuntimes.append(NPCRuntime(id: config.id, config: config, root: root, torso: torso, bodyColor: shirt))
+    }
+
+    /// Convert a dialog enemy into a patrolling hostile, reusing its figure.
+    private func turnNPCHostile(_ npc: NPCRuntime) {
+        let base = npc.root.position
+        enemyRuntimes.append(EnemyRuntime(
+            configId: npc.config.id,
+            entity: npc.root,
+            flashBody: npc.torso,
+            flashColor: npc.bodyColor,
+            health: npc.config.combatMaxHealth ?? 1.0,
+            patrolMinX: base.x - (npc.config.patrolHalfWidth ?? 2.0),
+            patrolMaxX: base.x + (npc.config.patrolHalfWidth ?? 2.0),
+            velocitySign: 1,
+            speed: npc.config.combatMoveSpeed ?? 1.2
+        ))
+        npcRuntimes.removeAll { $0.id == npc.id }
+        if nearestNPCId == npc.id { nearestNPCId = nil }
+    }
+
+    private func openDialog(for npc: NPCRuntime, viewModel: GameSessionViewModel) {
+        // Stop the player so the conversation reads as a modal beat.
+        if var mot = player.components[PhysicsMotionComponent.self] {
+            mot.linearVelocity = SIMD3(0, mot.linearVelocity.y, 0)
+            player.components.set(mot)
+        }
+        smoothedStick = .zero
+        viewModel.pendingDialogChoiceId = nil
+        viewModel.dialogCloseRequested = false
+        viewModel.activeDialog = DialogState(
+            npcId: npc.id,
+            speaker: npc.config.displayName,
+            line: npc.config.openingLine,
+            choices: npc.config.choices.map { DialogChoiceVM(id: $0.id, label: $0.label) }
+        )
+    }
+
+    private func processDialog(viewModel: GameSessionViewModel) {
+        guard var dialog = viewModel.activeDialog else { return }
+
+        if let choiceId = viewModel.pendingDialogChoiceId {
+            viewModel.pendingDialogChoiceId = nil
+            if let npc = npcRuntimes.first(where: { $0.id == dialog.npcId }),
+               let choice = npc.config.choices.first(where: { $0.id == choiceId }) {
+                npcChoices[dialog.npcId] = choiceId        // remembered for later systems
+                dialog.line = choice.response
+                dialog.choices = []                        // response screen → only "Leave"
+                viewModel.activeDialog = dialog
+                if choice.turnsHostile { pendingHostileNPCId = npc.id }
+            }
+        }
+
+        if viewModel.dialogCloseRequested {
+            viewModel.dialogCloseRequested = false
+            viewModel.activeDialog = nil
+            if let hid = pendingHostileNPCId,
+               let npc = npcRuntimes.first(where: { $0.id == hid }) {
+                turnNPCHostile(npc)
+                viewModel.flashInteractMessage("\(npc.config.displayName) turns hostile!")
+            }
+            pendingHostileNPCId = nil
+        }
+    }
+
     // MARK: - Physics / movement
 
     private func applyMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
-        // Raw stick: x = strafe, y = forward (drag up = forward).
+        // CAMERA-RELATIVE model (standard 3rd-person): the stick direction is mapped
+        // into the camera's ground frame, the character accelerates that way and eases
+        // to FACE its travel direction. The camera is player-controlled (look pad), so
+        // there's no facing/camera feedback loop and the body never moonwalks.
         var stick = SIMD2<Float>(viewModel.horizontalInput, -viewModel.verticalInput)
-        var stickMag = simd_length(stick)
+        let mag = simd_length(stick)
 
-        // Radial dead-zone + smoothstep response curve: gentle pushes give fine
-        // walking control, full pushes give full sprint without a twitchy mid-range.
         let deadZone: Float = 0.12
-        if stickMag <= deadZone {
+        if mag <= deadZone {
             stick = .zero
-            stickMag = 0
         } else {
-            let norm   = min(1, (stickMag - deadZone) / (1 - deadZone))
+            let norm   = min(1, (mag - deadZone) / (1 - deadZone))
             let curved = norm * norm * (3 - 2 * norm)   // smoothstep
-            stick = (stick / stickMag) * curved
-            stickMag = curved
+            stick = (stick / mag) * curved
         }
 
-        // Low-pass the stick so a jittery thumb doesn't yank the heading around.
-        // Drives both movement and facing, so direction stays stable frame to frame.
+        // Low-pass the stick so a jittery thumb doesn't twitch the heading.
         smoothedStick += (stick - smoothedStick) * (1 - exp(-20 * deltaTime))
-        let inputMag = simd_length(smoothedStick)
 
-        // Camera-relative move direction on the ground plane.
         let fwd = cameraRig.groundForward
         let rgt = cameraRig.groundRight
         var moveXZ = fwd * smoothedStick.y + rgt * smoothedStick.x
@@ -1037,44 +1201,34 @@ final class ThirdPersonSceneController {
         let runSpeed: Float = 4.6
         guard let motion = player.components[PhysicsMotionComponent.self] else { return }
         let v = motion.linearVelocity
-
-        // Target planar velocity scaled by how far the stick is pushed.
         let desiredX = moveXZ.x * runSpeed
         let desiredZ = moveXZ.z * runSpeed
 
-        // Pick a response rate: weighty-but-quick on accelerate, snappier on a
-        // hard direction change, crisp on release. Exponential => framerate-independent.
-        let curSpeed     = simd_length(SIMD2(v.x, v.z))
+        let curSpeed = simd_length(SIMD2(v.x, v.z))
         let desiredSpeed = simd_length(SIMD2(desiredX, desiredZ))
         let rate: Float
-        if stickMag <= 0.001 {
+        if moveMag <= 0.001 {
             rate = 18                       // releasing — stop crisply
         } else if desiredSpeed < curSpeed {
-            rate = 16                       // turning / easing down
+            rate = 16                       // easing down / direction change
         } else {
             rate = 13                       // accelerating
         }
         let t = 1 - exp(-rate * deltaTime)
-
         let dvX = (desiredX - v.x) * t
         let dvZ = (desiredZ - v.z) * t
         player.applyLinearImpulse(SIMD3(Self.playerMass * dvX, 0, Self.playerMass * dvZ), relativeTo: nil)
 
-        // Turn toward travel direction at a CAPPED angular rate so the character
-        // can't pirouette, and only when the push is deliberate (not stick jitter).
-        if inputMag > 0.2, moveMag > 0.001 {
-            let targetAngle  = atan2(moveXZ.x, -moveXZ.z)
-            let currentAngle = atan2(playerFacingVector.x, -playerFacingVector.z)
-            let raw   = targetAngle - currentAngle
-            let delta = atan2(sin(raw), cos(raw))     // shortest signed turn, wrapped to ±π
-
-            let maxTurn: Float  = 4.5                  // rad/s ceiling (~258°/s) — calm, deliberate
-            let turnEase: Float = 10                   // smooth approach for small corrections
-            let eased = delta * min(1, turnEase * deltaTime)
-            let step  = max(-maxTurn * deltaTime, min(maxTurn * deltaTime, eased))
-
-            let newAngle = currentAngle + step
-            playerFacingVector = SIMD3(sin(newAngle), 0, -cos(newAngle))
+        // Ease the heading toward the travel direction (capped so big reversals don't snap).
+        if moveMag > 0.05 {
+            let targetAngle = atan2(moveXZ.x, -moveXZ.z)
+            let cur = atan2(playerFacingVector.x, -playerFacingVector.z)
+            let d = atan2(sin(targetAngle - cur), cos(targetAngle - cur))
+            let maxTurn: Float = 10                       // rad/s ceiling
+            let eased = d * (1 - exp(-14 * deltaTime))
+            let step = max(-maxTurn * deltaTime, min(maxTurn * deltaTime, eased))
+            let na = cur + step
+            playerFacingVector = SIMD3(sin(na), 0, -cos(na))
         }
     }
 
@@ -1105,13 +1259,17 @@ final class ThirdPersonSceneController {
 
         playerFacingVector = SIMD3(0, 0, -1)
         smoothedStick = .zero
+        viewModel.pendingCameraYaw = 0
+        viewModel.pendingCameraPitch = 0
+        viewModel.isLookingActive = false
         resetStrikeFeedback()
         cameraRig = ThirdPersonCameraRig()
-        cameraRig.reset(playerPosition: player.position)
+        cameraRig.reset(playerPosition: player.position, facing: playerFacingVector)
         perspectiveCamera.transform = cameraRig.step(
             deltaTime: 1,
             playerPosition: player.position,
-            playerFacing: playerFacingVector
+            playerFacing: playerFacingVector,
+            autoRecenter: false
         )
     }
 
@@ -1292,8 +1450,8 @@ final class ThirdPersonSceneController {
 
             if enemyRuntimes[i].flash > 0 {
                 enemyRuntimes[i].flash = Swift.max(0, enemyRuntimes[i].flash - deltaTime / 0.18)
-                let col = Self.mixColor(Self.enemyColor, .white, enemyRuntimes[i].flash)
-                enemyRuntimes[i].entity.model?.materials = [SimpleMaterial(color: col, isMetallic: false)]
+                let col = Self.mixColor(enemyRuntimes[i].flashColor, .white, enemyRuntimes[i].flash)
+                enemyRuntimes[i].flashBody?.model?.materials = [SimpleMaterial(color: col, roughness: 0.9, isMetallic: false)]
             }
         }
     }
@@ -1528,6 +1686,14 @@ final class ThirdPersonSceneController {
 
     private func updateInteractPrompt(viewModel: GameSessionViewModel) {
         viewModel.nearWorkstationId = nil
+        nearestNPCId = nil
+
+        // People are the primary interactable — check them first.
+        if let npc = nearestNPCInRange() {
+            nearestNPCId = npc.id
+            viewModel.interactPrompt = npc.config.interactPrompt
+            return
+        }
 
         if let ws = nearestWorkstationInRange(), workstationProp.isEnabled {
             viewModel.nearWorkstationId = ws.id
@@ -1555,10 +1721,19 @@ final class ThirdPersonSceneController {
         loadedWorkstations.first { withinInteractReach(player: player.position, target: $0.worldPosition.simd) }
     }
 
+    private func nearestNPCInRange() -> NPCRuntime? {
+        npcRuntimes.first { withinInteractReach(player: player.position, target: $0.root.position) }
+    }
+
     private func processInteract(viewModel: GameSessionViewModel) {
         guard viewModel.interactRequested else { return }
         viewModel.interactRequested = false
         guard !viewModel.interactPrompt.isEmpty else { return }
+
+        if let npcId = nearestNPCId, let npc = npcRuntimes.first(where: { $0.id == npcId }) {
+            openDialog(for: npc, viewModel: viewModel)
+            return
+        }
 
         if nearestWorkstationInRange() != nil, workstationProp.isEnabled {
             viewModel.showCraftingSheet = true

@@ -33,10 +33,15 @@ struct GameRootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
 
-                inventoryOverlay(safe: safe, controlBand: controlBand)
-
                 TraversalTouchOverlay(viewModel: viewModel)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // Above the controls so the Bag button stays tappable over the look pad.
+                inventoryOverlay(safe: safe, controlBand: controlBand)
+
+                if viewModel.activeDialog != nil {
+                    dialogOverlay
+                }
 
                 if showChapterIntro {
                     chapterIntroOverlay
@@ -146,6 +151,51 @@ struct GameRootView: View {
         .padding(.bottom, controlBand)
         .padding(.leading, safe.leading + 10)
         .padding(.trailing, safe.trailing + 10)
+    }
+
+    @ViewBuilder
+    private var dialogOverlay: some View {
+        if let dialog = viewModel.activeDialog {
+            ZStack(alignment: .bottom) {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())  // capture taps so controls below are inert
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(dialog.speaker)
+                        .font(.headline)
+                    Text(dialog.line)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if dialog.choices.isEmpty {
+                        Button("Leave") {
+                            viewModel.dialogCloseRequested = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    } else {
+                        HStack(spacing: 12) {
+                            ForEach(dialog.choices) { choice in
+                                Button(choice.label) {
+                                    viewModel.pendingDialogChoiceId = choice.id
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 460)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1))
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            }
+            .transition(.opacity)
+        }
     }
 
     private var chapterIntroOverlay: some View {

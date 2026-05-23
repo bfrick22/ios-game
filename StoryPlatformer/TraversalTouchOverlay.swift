@@ -1,35 +1,72 @@
 import SwiftUI
 
-/// Touch-first traversal: virtual stick (move + climb axis), interact, grounded melee, jump.
+/// Touch-first traversal: virtual stick (move), right-side look pad (camera orbit),
+/// interact, grounded melee, jump.
 struct TraversalTouchOverlay: View {
     @Bindable var viewModel: GameSessionViewModel
+    @State private var lastLook: CGSize = .zero
 
     var body: some View {
         GeometryReader { geo in
             let safe = geo.safeAreaInsets
-            ZStack(alignment: .bottom) {
-                HStack(alignment: .bottom, spacing: 0) {
-                    virtualStick
-                        .frame(width: geo.size.width * 0.42, height: 160 + safe.bottom)
-                        .padding(.leading, 12)
-                        .padding(.bottom, 8 + safe.bottom * 0.25)
-
-                    Spacer(minLength: 0)
+            ZStack {
+                // Camera look pad: right portion of the screen, beneath the controls.
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: geo.size.width * 0.45)
                         .allowsHitTesting(false)
-
-                    VStack(spacing: 14) {
-                        interactButton
-                        attackButton
-                        jumpButton
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 12 + safe.bottom)
+                    cameraLookPad
                 }
+
+                ZStack(alignment: .bottom) {
+                    HStack(alignment: .bottom, spacing: 0) {
+                        virtualStick
+                            .frame(width: geo.size.width * 0.42, height: 160 + safe.bottom)
+                            .padding(.leading, 12)
+                            .padding(.bottom, 8 + safe.bottom * 0.25)
+
+                        Spacer(minLength: 0)
+                            .allowsHitTesting(false)
+
+                        VStack(spacing: 14) {
+                            interactButton
+                            attackButton
+                            jumpButton
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 12 + safe.bottom)
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(true)
+    }
+
+    /// Drag anywhere on the right side (away from the action buttons) to orbit the camera.
+    private var cameraLookPad: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        let dx = Float(value.translation.width - lastLook.width)
+                        let dy = Float(value.translation.height - lastLook.height)
+                        lastLook = value.translation
+                        viewModel.pendingCameraYaw += dx * 0.006     // ~0.34°/pt
+                        viewModel.pendingCameraPitch += dy * 0.004
+                        viewModel.isLookingActive = true
+                    }
+                    .onEnded { _ in
+                        lastLook = .zero
+                        viewModel.isLookingActive = false
+                    }
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Look")
+            .accessibilityHint("Drag to move the camera.")
     }
 
     private var virtualStick: some View {
