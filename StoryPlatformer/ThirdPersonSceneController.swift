@@ -23,6 +23,25 @@ private struct EnemyRuntime {
     let patrolMaxX: Float
     var velocitySign: Float
     let speed: Float
+    var flash: Float = 0          // 0…1 white hit-flash, decays after a strike
+}
+
+/// Short-lived impact burst (expanding spark) spawned at a strike contact point.
+private struct ImpactEffect {
+    let root: Entity
+    var age: Float
+    let life: Float
+}
+
+/// A strikable training dummy: swings on a damped spring and flashes when hit.
+private struct StrikeDummy {
+    let root: Entity
+    let body: ModelEntity
+    let baseColor: UIColor
+    var tilt: Float = 0
+    var tiltVel: Float = 0
+    var axis: SIMD3<Float> = SIMD3(1, 0, 0)
+    var flash: Float = 0
 }
 
 /// Owns RealityKit entities and physics for one loaded chapter in 3rd-person view.
@@ -71,6 +90,16 @@ final class ThirdPersonSceneController {
     private var tripwireRegion: AxisAlignedRegion?
     private var meleeCooldownRemaining: Float = 0
     private var hostileContactCooldown: Float = 0
+
+    /// Strike-feedback state: impact bursts, strikable dummies, and touch haptics.
+    private var impactEffects: [ImpactEffect] = []
+    private var strikeDummies: [StrikeDummy] = []
+    private static let enemyColor = UIColor(red: 0.42, green: 0.20, blue: 0.16, alpha: 1)
+    private lazy var hitHaptics: UIImpactFeedbackGenerator = {
+        let g = UIImpactFeedbackGenerator(style: .medium)
+        g.prepare()
+        return g
+    }()
 
     private var locomotionPhase: Float = 0
     private var locomotionBlend: Float = 0
@@ -256,6 +285,9 @@ final class ThirdPersonSceneController {
         processHostileContact(viewModel: viewModel)
         processInteract(viewModel: viewModel)
         processChapterCompletion(viewModel: viewModel)
+
+        updateStrikeDummies(deltaTime)
+        updateImpactEffects(deltaTime)
 
         perspectiveCamera.transform = cameraRig.step(
             deltaTime: deltaTime,
@@ -598,16 +630,30 @@ final class ThirdPersonSceneController {
         cone("Cone.B", 0.4, 0.18,  1.6, -6, orange)
         cone("Cone.C", 0.4, 0.18,  0.0, -8, orange)
 
-        // ── Heavy training dummies (z -12..-24): weave course ─────────────────
+        // ── Heavy training dummies (z -12..-24): weave course + strikable ─────
+        // Each dummy hangs its visuals on a root that swings when struck (see
+        // updateStrikeDummies); the collider stays upright so weaving is unaffected.
+        strikeDummies.removeAll()
         let dummies: [(Float, Float, UIColor)] = [
             (-2.6, -12, matRed), (2.6, -16, matBlue), (-2.6, -20, matRed), (2.6, -24, matBlue),
         ]
         for (i, d) in dummies.enumerated() {
             collider("Dummy.\(i).col", SIMD3(0.9, 2.0, 0.9), d.0, d.1)
-            cyld("Dummy.\(i).base", 0.14, 0.46, d.0, 0.07, d.1, padBlack)
-            cyld("Dummy.\(i).body", 1.45, 0.32, d.0, 0.92, d.1, d.2)
-            cyld("Dummy.\(i).band", 0.12, 0.34, d.0, 1.18, d.1, line)
-            sphd("Dummy.\(i).head", 0.33, d.0, 1.78, d.1, padBlack)
+            let root = Entity()
+            root.name = "Dummy.\(i)"
+            root.position = SIMD3(d.0, 0, d.1)
+            environmentRoot.addChild(root)
+            func part(_ mesh: MeshResource, _ color: UIColor, _ y: Float) -> ModelEntity {
+                let e = ModelEntity(mesh: mesh, materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: false)])
+                e.position = SIMD3(0, y, 0)
+                root.addChild(e)
+                return e
+            }
+            _ = part(.generateCylinder(height: 0.14, radius: 0.46), padBlack, 0.07)
+            let body = part(.generateCylinder(height: 1.45, radius: 0.32), d.2, 0.92)
+            _ = part(.generateCylinder(height: 0.12, radius: 0.34), line, 1.18)
+            _ = part(.generateSphere(radius: 0.33), padBlack, 1.78)
+            strikeDummies.append(StrikeDummy(root: root, body: body, baseColor: d.2))
         }
 
         // ── Sprint lane (z -25..-31): painted lane lines ──────────────────────
@@ -940,7 +986,7 @@ final class ThirdPersonSceneController {
         ent.name = "Hostile.\(config.id)"
         ent.model = ModelComponent(
             mesh: .generateBox(size: SIMD3(w, h, w * 0.82)),
-            materials: [SimpleMaterial(color: UIColor(red: 0.42, green: 0.20, blue: 0.16, alpha: 1), isMetallic: false)]
+            materials: [SimpleMaterial(color: Self.enemyColor, isMetallic: false)]
         )
         let base = config.worldPosition.simd
         ent.position = base
@@ -1059,6 +1105,7 @@ final class ThirdPersonSceneController {
 
         playerFacingVector = SIMD3(0, 0, -1)
         smoothedStick = .zero
+        resetStrikeFeedback()
         cameraRig = ThirdPersonCameraRig()
         cameraRig.reset(playerPosition: player.position)
         perspectiveCamera.transform = cameraRig.step(
@@ -1242,6 +1289,12 @@ final class ThirdPersonSceneController {
                 x = enemyRuntimes[i].patrolMinX
             }
             enemyRuntimes[i].entity.position.x = x
+
+            if enemyRuntimes[i].flash > 0 {
+                enemyRuntimes[i].flash = Swift.max(0, enemyRuntimes[i].flash - deltaTime / 0.18)
+                let col = Self.mixColor(Self.enemyColor, .white, enemyRuntimes[i].flash)
+                enemyRuntimes[i].entity.model?.materials = [SimpleMaterial(color: col, isMetallic: false)]
+            }
         }
     }
 
@@ -1285,23 +1338,133 @@ final class ThirdPersonSceneController {
         let dmg = MeleeCombat.strikeDamage(equippedWeaponItemId: viewModel.equippedWeaponItemId)
         let p = player.position
         var hit = false
+
+        // Hostiles: take damage + flash + impact burst.
         for i in enemyRuntimes.indices {
             guard enemyRuntimes[i].health > 0 else { continue }
             guard enemyInMeleeArc(player: p, enemy: enemyRuntimes[i].entity.position) else { continue }
             enemyRuntimes[i].health -= dmg
+            enemyRuntimes[i].flash = 1
             hit = true
+            let e = enemyRuntimes[i].entity.position
             if enemyRuntimes[i].health <= 0 {
                 enemyRuntimes[i].entity.isEnabled = false
                 viewModel.flashInteractMessage("Hostile down.")
             } else {
                 viewModel.flashInteractMessage(step == 1 ? "Jab!" : step == 2 ? "Cross!" : "Kick!")
             }
+            strikeFeedback(at: SIMD3(e.x, 0.9, e.z), shake: 0.05)
             break
         }
+
+        // Training dummies: no damage — they swing, flash, and pop a burst.
+        if !hit {
+            for i in strikeDummies.indices {
+                let d = strikeDummies[i].root.position
+                guard enemyInMeleeArc(player: p, enemy: SIMD3(d.x, p.y, d.z)) else { continue }
+                let dir = SIMD2(d.x - p.x, d.z - p.z)
+                let len = simd_length(dir)
+                guard len > 0.001 else { continue }
+                let nx = dir.x / len, nz = dir.y / len
+                strikeDummies[i].axis = SIMD3(nz, 0, -nx)       // tilt away from the player
+                strikeDummies[i].tiltVel += 6.0
+                strikeDummies[i].flash = 1
+                strikeFeedback(at: SIMD3(d.x, 1.15, d.z), shake: 0.06)
+                viewModel.flashInteractMessage(step == 3 ? "Kick — thud!" : "Clean hit!")
+                hit = true
+                break
+            }
+        }
+
         if !hit {
             let miss = step == 1 ? "Jab." : step == 2 ? "Cross." : "Kick."
             viewModel.flashInteractMessage(miss)
         }
+    }
+
+    /// Universal hit juice: spark burst at the contact point, haptic, camera kick.
+    private func strikeFeedback(at point: SIMD3<Float>, shake: Float) {
+        spawnImpactEffect(at: point)
+        hitHaptics.impactOccurred(intensity: 1.0)
+        hitHaptics.prepare()
+        cameraRig.addShake(shake)
+    }
+
+    private func spawnImpactEffect(at point: SIMD3<Float>) {
+        let fxRoot = Entity()
+        fxRoot.position = point
+        let core = ModelEntity(mesh: .generateSphere(radius: 0.12),
+                               materials: [UnlitMaterial(color: UIColor(white: 1, alpha: 1))])
+        fxRoot.addChild(core)
+        let sparkColor = UIColor(red: 1.0, green: 0.85, blue: 0.35, alpha: 1)
+        for i in 0 ..< 5 {
+            let shard = ModelEntity(mesh: .generateBox(size: SIMD3(0.05, 0.05, 0.05)),
+                                    materials: [UnlitMaterial(color: sparkColor)])
+            let a = Float(i) / 5 * 2 * .pi
+            shard.position = SIMD3(cos(a) * 0.14, sin(Float(i)) * 0.05, sin(a) * 0.14)
+            fxRoot.addChild(shard)
+        }
+        root.addChild(fxRoot)
+        impactEffects.append(ImpactEffect(root: fxRoot, age: 0, life: 0.18))
+    }
+
+    /// Expands the burst then shrinks it out; removes finished effects.
+    private func updateImpactEffects(_ deltaTime: Float) {
+        guard !impactEffects.isEmpty else { return }
+        for i in impactEffects.indices {
+            impactEffects[i].age += deltaTime
+            let u = min(1, impactEffects[i].age / impactEffects[i].life)
+            let s: Float = u < 0.5 ? (0.3 + u * 2.0) : Swift.max(0.001, 1.3 * (1 - (u - 0.5) / 0.5))
+            impactEffects[i].root.scale = SIMD3(repeating: s)
+        }
+        for fx in impactEffects where fx.age >= fx.life { fx.root.removeFromParent() }
+        impactEffects.removeAll { $0.age >= $0.life }
+    }
+
+    /// Damped-spring swing + decaying white flash for struck training dummies.
+    private func updateStrikeDummies(_ deltaTime: Float) {
+        guard !strikeDummies.isEmpty else { return }
+        let k: Float = 60, c: Float = 6
+        for i in strikeDummies.indices {
+            if strikeDummies[i].tilt != 0 || strikeDummies[i].tiltVel != 0 {
+                let acc = -k * strikeDummies[i].tilt - c * strikeDummies[i].tiltVel
+                strikeDummies[i].tiltVel += acc * deltaTime
+                strikeDummies[i].tilt += strikeDummies[i].tiltVel * deltaTime
+                strikeDummies[i].tilt = Swift.max(-0.5, Swift.min(0.5, strikeDummies[i].tilt))
+                if abs(strikeDummies[i].tilt) < 0.0005, abs(strikeDummies[i].tiltVel) < 0.0005 {
+                    strikeDummies[i].tilt = 0
+                    strikeDummies[i].tiltVel = 0
+                }
+                strikeDummies[i].root.transform.rotation = simd_quatf(angle: strikeDummies[i].tilt, axis: strikeDummies[i].axis)
+            }
+            if strikeDummies[i].flash > 0 {
+                strikeDummies[i].flash = Swift.max(0, strikeDummies[i].flash - deltaTime / 0.18)
+                let col = Self.mixColor(strikeDummies[i].baseColor, .white, strikeDummies[i].flash)
+                strikeDummies[i].body.model?.materials = [SimpleMaterial(color: col, roughness: 0.9, isMetallic: false)]
+            }
+        }
+    }
+
+    /// Clears bursts and returns every dummy to upright + base color (chapter reset).
+    private func resetStrikeFeedback() {
+        for fx in impactEffects { fx.root.removeFromParent() }
+        impactEffects.removeAll()
+        for i in strikeDummies.indices {
+            strikeDummies[i].tilt = 0
+            strikeDummies[i].tiltVel = 0
+            strikeDummies[i].flash = 0
+            strikeDummies[i].root.transform.rotation = simd_quatf(angle: 0, axis: SIMD3(0, 1, 0))
+            strikeDummies[i].body.model?.materials = [SimpleMaterial(color: strikeDummies[i].baseColor, roughness: 0.9, isMetallic: false)]
+        }
+    }
+
+    private static func mixColor(_ a: UIColor, _ b: UIColor, _ t: Float) -> UIColor {
+        var ar: CGFloat = 0, ag: CGFloat = 0, ab: CGFloat = 0, aa: CGFloat = 0
+        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
+        a.getRed(&ar, green: &ag, blue: &ab, alpha: &aa)
+        b.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+        let f = CGFloat(Swift.max(0, Swift.min(1, t)))
+        return UIColor(red: ar + (br - ar) * f, green: ag + (bg - ag) * f, blue: ab + (bb - ab) * f, alpha: 1)
     }
 
     private func updateComboAnimation(deltaTime: Float) {

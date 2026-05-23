@@ -14,6 +14,14 @@ struct ThirdPersonCameraRig {
     private var currentFacing: SIMD3<Float> = SIMD3(0, 0, -1)
     private var currentEye: SIMD3<Float> = SIMD3(0, 3, 5)
 
+    /// Transient impact shake magnitude (meters of eye jitter); decays each tick.
+    private var shakeAmount: Float = 0
+
+    /// Add a one-shot camera kick, e.g. on a landed strike.
+    mutating func addShake(_ amount: Float) {
+        shakeAmount = min(0.3, shakeAmount + amount)
+    }
+
     /// Direction to move the player when stick is pushed forward.
     var groundForward: SIMD3<Float> { currentFacing }
 
@@ -54,14 +62,25 @@ struct ThirdPersonCameraRig {
         let alpha = 1 - exp(-positionSmoothSpeed * deltaTime)
         currentEye += (targetEye - currentEye) * alpha
 
-        // Build rotation: camera looks from currentEye toward lookAt.
-        let forward = normalize(lookAt - currentEye)
+        // Transient impact shake: jitter the eye, decaying fast. Base eye is unshaken
+        // so the kick doesn't accumulate into the smoothed follow position.
+        shakeAmount *= exp(-14 * deltaTime)
+        if shakeAmount < 0.001 { shakeAmount = 0 }
+        let jitter = SIMD3<Float>(
+            Float.random(in: -1 ... 1),
+            Float.random(in: -1 ... 1),
+            Float.random(in: -1 ... 1)
+        ) * shakeAmount
+        let eye = currentEye + jitter
+
+        // Build rotation: camera looks from the (shaken) eye toward lookAt.
+        let forward = normalize(lookAt - eye)
         let worldUp = SIMD3<Float>(0, 1, 0)
         let right = normalize(cross(forward, worldUp))
         let up = cross(right, forward)
         let rotMat = simd_float3x3(columns: (right, up, -forward))
         let orientation = simd_quatf(rotMat)
 
-        return Transform(scale: .one, rotation: orientation, translation: currentEye)
+        return Transform(scale: .one, rotation: orientation, translation: eye)
     }
 }
