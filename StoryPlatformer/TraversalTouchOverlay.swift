@@ -118,7 +118,8 @@ struct TraversalTouchOverlay: View {
             viewModel.attackRequested = true
         } label: {
             Label("Strike", systemImage: "figure.boxing")
-                .font(.body.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
                 .frame(width: 72, height: 56)
                 .background(
                     viewModel.isGrounded && !viewModel.isClimbing
@@ -158,9 +159,10 @@ struct TraversalTouchOverlay: View {
             viewModel.interactRequested = true
         } label: {
             Label("Interact", systemImage: "hand.tap.fill")
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 4)
                 .frame(width: 72, height: 56)
                 .background(viewModel.interactPrompt.isEmpty ? Color.gray.opacity(0.35) : Color.accentColor.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 1))
