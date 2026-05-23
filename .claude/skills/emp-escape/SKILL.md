@@ -52,8 +52,8 @@ Then stop and wait. If the user says override / "do it anyway" / equivalent, bui
 ## Core identity (the non-negotiables of the *vision*)
 
 - **Genre:** story-driven survival experience
-- **Perspective:** **3rd-person, behind-the-shoulder.** Orbit camera auto-follows the player's heading with smooth yaw lag, pitched down from horizontal, always behind the player. No top-down, isometric, first-person, side-scroller, or free camera.
-- **Movement:** left stick drives the player in **camera-relative XZ**; the character rotates to face the movement direction. Open 3D space the player can navigate *around* obstacles — not corridor-locked, not open-world.
+- **Perspective:** **3rd-person, behind-the-shoulder.** Player-controlled orbit camera: a **right-side look pad (second thumb)** drives camera yaw/pitch; the rig gently auto-recenters behind the heading only while running and not looking. Pitched down from horizontal. No top-down, isometric, first-person, or side-scroller. (Not a tight auto-follow — that caused a movement/camera feedback loop and is avoided.)
+- **Movement:** left stick drives the player in **camera-relative XZ** (frame from the camera yaw); the character eases to face its travel direction. Standard 3rd-person controller (camera-relative move + orbit camera) so the body always faces where it moves. Open 3D space the player can navigate *around* obstacles — not corridor-locked, not open-world.
 - **Setting:** modern United States, post-EMP collapse, civilian survival, urban → suburban → safe zone progression
 - **Tone:** serious, grounded, survival-focused, hopeful
 - **Visual style:** modern stylized-realism or clean low-poly, readable mobile silhouettes — *never* pixel art. Primitives are fine for the prototype phase; target USDZ/RealityKit assets for production.
@@ -93,10 +93,10 @@ Known chapter arc (extend as needed, keep order):
 Full details in the root `CLAUDE.md`. The summaries below are what you need for most code tasks.
 
 ### Camera
-- 3rd-person orbit rig (`ThirdPersonCameraRig`): follows behind the player, smooth yaw lag, pitched down, exposes `groundForward` / `groundRight` for camera-relative movement. No free rotation.
+- Player-orbited rig (`ThirdPersonCameraRig`): yaw/pitch driven by the **right-side look pad**, pitched down, with a gentle auto-recenter behind the heading while running and not looking. Exposes `groundForward` / `groundRight` for camera-relative movement. Do NOT reintroduce tight auto-follow of the heading (it caused a feedback loop / moonwalking).
 
 ### Movement
-- Camera-relative left-stick input on the XZ plane; player rotates to face travel. Velocity-driven physics body with smoothed acceleration and a **capped turn rate** (avoid spinny/jittery heading). Touch input is dead-zoned, curved, and low-passed.
+- Camera-relative left-stick input on the XZ plane; player eases to face travel. Velocity-driven physics body with smoothed acceleration and a capped facing-turn rate. Touch input is dead-zoned, curved, and low-passed. The right look pad orbits the camera (two-thumb controls).
 
 ### Inventory
 - Simple, small fixed slots (8–12), expandable later
@@ -118,8 +118,9 @@ Full details in the root `CLAUDE.md`. The summaries below are what you need for 
 - **Not** XP/grinding/resource accumulation
 
 ### Controls
-- Mobile-first touch input, low friction, immediate feedback
-- Core verbs: Move, Jump, Interact, Attack, Use Item, Trigger Trap
+- Mobile-first, **two-thumb** touch input, low friction, immediate feedback
+- Left stick = camera-relative move; right-side look pad = orbit camera
+- Core verbs: Move, Look, Jump, Interact, Attack, Use Item, Trigger Trap
 
 ---
 
@@ -152,4 +153,4 @@ Full details in the root `CLAUDE.md`. The summaries below are what you need for 
 ## Reference files
 
 - **Project root `CLAUDE.md`** — the authoritative, checked-in design + stack ruleset. Read it for any non-trivial system work.
-- **Key source files** — `ThirdPersonCameraRig.swift` (orbit camera), `ThirdPersonSceneController.swift` (entities/physics/game-loop tick + level geometry), `GameSessionViewModel.swift` (observable state), `GameRootView.swift` (SwiftUI host + HUD), `TraversalTouchOverlay.swift` (touch controls), `ChapterConfig.swift` (level data).
+- **Key source files** — `ThirdPersonCameraRig.swift` (player-orbited camera), `ThirdPersonSceneController.swift` (entities/physics/game-loop tick + level geometry), `GameSessionViewModel.swift` (observable state incl. camera-look deltas + dialog), `GameRootView.swift` (SwiftUI host + HUD), `TraversalTouchOverlay.swift` (move stick + look pad + buttons), `ChapterConfig.swift` (level data incl. NPCs).

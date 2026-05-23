@@ -12,12 +12,12 @@
 
 | File | Role |
 |---|---|
-| `ThirdPersonCameraRig.swift` | Orbit camera: follows behind player, exposes `groundForward`/`groundRight` for movement |
+| `ThirdPersonCameraRig.swift` | Player-orbited camera: yaw/pitch driven by the look pad, gentle auto-recenter behind heading; exposes `groundForward`/`groundRight` for camera-relative movement |
 | `ThirdPersonSceneController.swift` | Owns all RealityKit entities, physics, game loop tick |
-| `GameSessionViewModel.swift` | Observable state: input, health, inventory, prompts |
-| `GameRootView.swift` | SwiftUI host: RealityView + HUD + timer |
-| `TraversalTouchOverlay.swift` | Virtual stick + action buttons |
-| `ChapterConfig.swift` | Level data: spawn, volumes, enemies, beats |
+| `GameSessionViewModel.swift` | Observable state: input, camera-look deltas, health, inventory, prompts, dialog |
+| `GameRootView.swift` | SwiftUI host: RealityView + HUD + `CADisplayLink` loop |
+| `TraversalTouchOverlay.swift` | Left move stick + right-side camera look pad + action buttons |
+| `ChapterConfig.swift` | Level data: spawn, volumes, enemies, beats, NPCs |
 
 ---
 
@@ -41,8 +41,8 @@
 
 - **3rd-person only:** behind-the-shoulder camera (Uncharted / Alan Wake style).
 - **Not allowed:** top-down, isometric, first-person, side-scroller, or free-roam open world.
-- **Camera:** auto-follows player heading; smooth yaw lag; pitched down from horizontal; always behind player.
-- **Movement:** left-stick drives player in camera-relative XZ; player character rotates to face movement direction.
+- **Camera:** player-controlled orbit. The **right-side look pad (second thumb)** drives camera yaw/pitch; the rig **gently auto-recenters behind the player's heading only while running and not actively looking**. Pitched down from horizontal. (Not a tight auto-follow — that created a movement/camera feedback loop and is intentionally avoided.)
+- **Movement:** left stick drives the player in **camera-relative XZ** (the stick's frame comes from the camera yaw, `groundForward`/`groundRight`); the character **eases to face its travel direction**. This is the standard 3rd-person controller (camera-relative move + orbit camera) — it keeps the body facing where it moves, so the player never moonwalks/appears to walk backwards.
 
 ### 4 — Visual style
 
@@ -90,8 +90,9 @@
 
 ### 13 — Controls
 
-- Touch-first: virtual left stick (camera-relative movement), jump, interact, attack.
-- **Left stick:** forward/back/strafe relative to camera facing.
+- Touch-first, **two-thumb**: virtual **left stick** (camera-relative movement) + **right-side look pad** (drag to orbit the camera), plus jump, interact, attack buttons.
+- **Left stick:** forward/back/strafe relative to camera facing; character faces travel direction.
+- **Right look pad:** drag to rotate camera yaw/pitch (the only way to turn the camera — no auto-snap).
 - Large targets, HIG-friendly, immediate feedback.
 
 ### 14 — Performance

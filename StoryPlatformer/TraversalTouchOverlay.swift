@@ -138,11 +138,16 @@ struct TraversalTouchOverlay: View {
         Button {
             viewModel.jumpRequested = true
         } label: {
-            Label("Jump", systemImage: "arrow.up.circle.fill")
-                .font(.title2.weight(.semibold))
-                .frame(width: 72, height: 72)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
+            VStack(spacing: 1) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.title3)
+                Text("Jump")
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .frame(width: 72, height: 72)
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Jump")
@@ -153,7 +158,9 @@ struct TraversalTouchOverlay: View {
             viewModel.interactRequested = true
         } label: {
             Label("Interact", systemImage: "hand.tap.fill")
-                .font(.body.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .frame(width: 72, height: 56)
                 .background(viewModel.interactPrompt.isEmpty ? Color.gray.opacity(0.35) : Color.accentColor.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 1))
