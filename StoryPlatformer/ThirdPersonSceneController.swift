@@ -1456,18 +1456,25 @@ final class ThirdPersonSceneController {
                 let rest = Self.elbowRestBend
 
                 // Keyframes: (normalizedTime, shoulderAngle, elbowAngle).
+                // Boxing PISTON: at chamber the upper arm hangs near the side with the
+                // elbow deeply folded so the FIST sits right at the shoulder; on the
+                // snap, the shoulder rotates up to horizontal AND the elbow straightens
+                // SIMULTANEOUSLY, so the fist drives forward in a near-straight line at
+                // shoulder height — not in an arc like a hammer/knock.
                 let jab: [(Float, Float, Float)] = [
                     (0.00, 0.00, rest),
-                    (0.26, 0.95, 1.30),    // chamber: guard up, fist cocked at the shoulder
-                    (0.44, 1.45, -0.05),   // thrust: arm horizontal, elbow snaps straight
-                    (0.62, 1.28, 0.12),
-                    (1.00, 0.00, rest),
+                    (0.18, 0.15, 2.50),    // chamber: arm by the side, elbow ~140° folded, fist at shoulder
+                    (0.30, 1.50, -0.05),   // SNAP: shoulder ↑ to horizontal + elbow extends → fist out
+                    (0.42, 1.40, 0.08),    // settle at impact
+                    (0.62, 0.30, 2.30),    // re-chamber on the way back
+                    (1.00, 0.00, rest),    // back to guard at side
                 ]
                 let cross: [(Float, Float, Float)] = [
                     (0.00, 0.00, rest),
-                    (0.32, 0.55, 1.55),    // deeper chamber: fist drawn further back, loaded
-                    (0.52, 1.62, -0.14),   // bigger thrust, full extension through the centerline
-                    (0.68, 1.42, 0.05),
+                    (0.22, 0.20, 2.70),    // deeper chamber (rear hand loads further)
+                    (0.36, 1.55, -0.12),   // bigger snap, fuller extension
+                    (0.50, 1.45, 0.05),    // settle at impact
+                    (0.72, 0.30, 2.50),    // re-chamber
                     (1.00, 0.00, rest),
                 ]
 
