@@ -341,17 +341,13 @@ final class ThirdPersonSceneController {
         updateStrikeDummies(deltaTime)
         updateImpactEffects(deltaTime)
 
-        // Auto-recenter the camera behind the player only when running and not looking.
-        let planarSpeed = simd_length(SIMD2(
-            player.components[PhysicsMotionComponent.self]?.linearVelocity.x ?? 0,
-            player.components[PhysicsMotionComponent.self]?.linearVelocity.z ?? 0
-        ))
-        let autoRecenter = planarSpeed > 0.6 && !viewModel.isLookingActive
+        // Camera is fully player-controlled (look pad); the body aligns to the camera
+        // in applyMovement, so auto-recenter would be redundant.
         perspectiveCamera.transform = cameraRig.step(
             deltaTime: deltaTime,
             playerPosition: player.position,
             playerFacing: playerFacingVector,
-            autoRecenter: autoRecenter
+            autoRecenter: false
         )
     }
 
@@ -1252,10 +1248,10 @@ final class ThirdPersonSceneController {
     // MARK: - Physics / movement
 
     private func applyMovement(viewModel: GameSessionViewModel, deltaTime: Float) {
-        // CAMERA-RELATIVE model (standard 3rd-person): the stick direction is mapped
-        // into the camera's ground frame, the character accelerates that way and eases
-        // to FACE its travel direction. The camera is player-controlled (look pad), so
-        // there's no facing/camera feedback loop and the body never moonwalks.
+        // CAMERA-ALIGNED model: stick direction maps into the camera's ground frame for
+        // MOVEMENT, and the body eases to face the CAMERA'S forward (not the stick).
+        // → up = walk forward (into the screen),  down = backpedal (body keeps facing
+        // forward, no spin),  left/right = strafe. To actually turn, use the look pad.
         var stick = SIMD2<Float>(viewModel.horizontalInput, -viewModel.verticalInput)
         let mag = simd_length(stick)
 
@@ -1298,15 +1294,16 @@ final class ThirdPersonSceneController {
         let dvZ = (desiredZ - v.z) * t
         player.applyLinearImpulse(SIMD3(Self.playerMass * dvX, 0, Self.playerMass * dvZ), relativeTo: nil)
 
-        // Ease the heading toward the travel direction (capped so big reversals don't snap).
-        if moveMag > 0.05 {
-            let targetAngle = atan2(moveXZ.x, -moveXZ.z)
+        // Align the body toward the CAMERA'S forward (only while there's input, so
+        // orbiting the look pad while idle doesn't drag the character around). Stick
+        // direction never rotates the body — that was the spin on back/down.
+        let inputMag = simd_length(smoothedStick)
+        if inputMag > 0.1 {
+            let fwdAngle = atan2(fwd.x, -fwd.z)
             let cur = atan2(playerFacingVector.x, -playerFacingVector.z)
-            let d = atan2(sin(targetAngle - cur), cos(targetAngle - cur))
-            let maxTurn: Float = 10                       // rad/s ceiling
-            let eased = d * (1 - exp(-14 * deltaTime))
-            let step = max(-maxTurn * deltaTime, min(maxTurn * deltaTime, eased))
-            let na = cur + step
+            let d = atan2(sin(fwdAngle - cur), cos(fwdAngle - cur))   // shortest signed turn
+            let eased = d * (1 - exp(-10 * deltaTime))
+            let na = cur + eased
             playerFacingVector = SIMD3(sin(na), 0, -cos(na))
         }
     }
