@@ -240,13 +240,17 @@ struct GameRootView: View {
     private var equippedLine: some View {
         let w = viewModel.equippedWeaponSummary
         let t = viewModel.equippedToolSummary
-        if w != nil || t != nil {
+        let armor = viewModel.totalArmor
+        if w != nil || t != nil || armor > 0 {
             HStack(spacing: 8) {
                 if let w {
                     Label(w, systemImage: "figure.fencing")
                 }
                 if let t {
                     Label(t, systemImage: "flashlight.on.fill")
+                }
+                if armor > 0 {
+                    Label("\(Int(round(armor * 100)))% armor", systemImage: "shield.lefthalf.filled")
                 }
             }
             .font(.caption2)

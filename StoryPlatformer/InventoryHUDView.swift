@@ -73,13 +73,14 @@ struct InventoryHUDView: View {
         let selected = viewModel.selectedInventorySlotIndex == index
         let stack = viewModel.inventorySlots[index]
         let def = stack.flatMap { ItemCatalog.definition(for: $0.itemId) }
+        let equipped = stack.map { viewModel.isEquipped($0.itemId) } ?? false
 
         return Button {
             viewModel.selectInventorySlot(index)
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(selected ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.08))
+                    .fill(slotFill(selected: selected, equipped: equipped))
                 if let stack, let def {
                     VStack(spacing: 2) {
                         Image(systemName: def.systemImageName)
@@ -100,11 +101,35 @@ struct InventoryHUDView: View {
             .frame(width: 44, height: 44)
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(selected ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.15), lineWidth: selected ? 2 : 1)
+                    .strokeBorder(slotBorder(selected: selected, equipped: equipped),
+                                  lineWidth: selected || equipped ? 2 : 1)
             )
+            // Equipped badge: a green check, distinct from the selection ring.
+            .overlay(alignment: .topTrailing) {
+                if equipped {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.green)
+                        .padding(2)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(slotAccessibilityLabel(index: index, stack: stack, def: def))
+        .accessibilityValue(equipped ? "Equipped" : "")
+    }
+
+    private func slotFill(selected: Bool, equipped: Bool) -> Color {
+        if selected { return Color.accentColor.opacity(0.35) }
+        if equipped { return Color.green.opacity(0.18) }
+        return Color.primary.opacity(0.08)
+    }
+
+    private func slotBorder(selected: Bool, equipped: Bool) -> Color {
+        if selected { return Color.accentColor.opacity(0.9) }
+        if equipped { return Color.green.opacity(0.85) }
+        return Color.white.opacity(0.15)
     }
 
     private func slotAccessibilityLabel(index: Int, stack: InventoryStack?, def: ItemDefinition?) -> String {

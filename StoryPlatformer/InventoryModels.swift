@@ -42,6 +42,9 @@ struct ItemDefinition: Sendable, Hashable, Equatable {
     var gearSlot: GearSlot? = nil
     /// Apparel: color applied to the slot's parts (or the mask mesh).
     var gearColor: RGBColor? = nil
+    /// Apparel boost: fraction of incoming damage this piece resists (0…1).
+    /// Placeholder boost model — gear "does something" via light damage resistance.
+    var armor: Float? = nil
 }
 
 struct InventoryStack: Sendable, Hashable, Equatable {
@@ -157,6 +160,28 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: 0.3
         ),
+        "item.baton": ItemDefinition(
+            id: "item.baton",
+            displayName: "Baton",
+            category: .weapon,
+            maxStack: 1,
+            systemImageName: "baseball.diamond.bases",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: 0.28
+        ),
+        // Gun: grounded post-EMP firearm. NOTE: ranged fire is not implemented yet —
+        // currently equips and pistol-whips via the melee system; ranged is a future system.
+        "item.pistol": ItemDefinition(
+            id: "item.pistol",
+            displayName: "Pistol",
+            category: .weapon,
+            maxStack: 1,
+            systemImageName: "scope",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: 0.14
+        ),
         // ── Apparel (equippable; recolors the matching rig parts) ─────────────
         "item.work_shirt": ItemDefinition(
             id: "item.work_shirt",
@@ -168,7 +193,8 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: nil,
             gearSlot: .shirt,
-            gearColor: RGBColor(r: 0.20, g: 0.46, b: 0.55)
+            gearColor: RGBColor(r: 0.20, g: 0.46, b: 0.55),
+            armor: 0.10
         ),
         "item.cargo_pants": ItemDefinition(
             id: "item.cargo_pants",
@@ -180,7 +206,8 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: nil,
             gearSlot: .pants,
-            gearColor: RGBColor(r: 0.42, g: 0.40, b: 0.26)
+            gearColor: RGBColor(r: 0.42, g: 0.40, b: 0.26),
+            armor: 0.06
         ),
         "item.work_gloves": ItemDefinition(
             id: "item.work_gloves",
@@ -192,7 +219,8 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: nil,
             gearSlot: .gloves,
-            gearColor: RGBColor(r: 0.30, g: 0.18, b: 0.10)
+            gearColor: RGBColor(r: 0.30, g: 0.18, b: 0.10),
+            armor: 0.03
         ),
         "item.balaclava": ItemDefinition(
             id: "item.balaclava",
@@ -204,7 +232,8 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: nil,
             gearSlot: .mask,
-            gearColor: RGBColor(r: 0.09, g: 0.09, b: 0.11)
+            gearColor: RGBColor(r: 0.09, g: 0.09, b: 0.11),
+            armor: 0.05
         ),
     ]
 }

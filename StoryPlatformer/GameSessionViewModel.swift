@@ -118,8 +118,25 @@ final class GameSessionViewModel {
         dialogCloseRequested = false
     }
 
+    /// True if this item is currently equipped in any slot (weapon, tool, or apparel).
+    /// Used by the Bag UI to badge equipped items distinctly from the selected slot.
+    func isEquipped(_ itemId: String) -> Bool {
+        equippedWeaponItemId == itemId
+            || equippedToolItemId == itemId
+            || equippedApparel.values.contains(itemId)
+    }
+
+    /// Total damage resistance from equipped apparel (capped). Placeholder gear boost.
+    var totalArmor: Float {
+        var sum: Float = 0
+        for id in equippedApparel.values {
+            if let a = ItemCatalog.definition(for: id)?.armor { sum += a }
+        }
+        return min(0.8, sum)
+    }
+
     func applyDamageFromHostile(normalizedAmount: Float) {
-        let a = max(0, normalizedAmount)
+        let a = max(0, normalizedAmount) * (1 - totalArmor)
         healthNormalized = max(0, healthNormalized - a)
     }
 

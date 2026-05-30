@@ -175,7 +175,7 @@ final class ThirdPersonSceneController {
         chapter: ChapterConfig
     ) {
         if !sceneGraphBuilt {
-            buildGround()
+            buildGround(forChapterId: chapter.id)
             if chapter.id == "chapter.tutorial" {
                 buildTutorialEnvironment()
             } else {
@@ -357,12 +357,17 @@ final class ThirdPersonSceneController {
 
     // MARK: - Scene building
 
-    private func buildGround() {
-        // Near-black factory floor — gives neon accents something dark to pop against.
+    private func buildGround(forChapterId chapterId: String) {
+        // Ground top sits at Y=0 (where the player rests). The visible surface IS this
+        // collision floor — no raised decorative mat — so feet never sink/float.
         let size = SIMD3<Float>(32, 0.25, 56)
+        let isGym = chapterId == "chapter.tutorial"
+        let color = isGym
+            ? UIColor(red: 0.66, green: 0.48, blue: 0.28, alpha: 1)   // gym hardwood
+            : UIColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1)   // dark factory floor
         ground.model = ModelComponent(
             mesh: .generateBox(size: size),
-            materials: [SimpleMaterial(color: UIColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1), isMetallic: true)]
+            materials: [SimpleMaterial(color: color, roughness: isGym ? 0.8 : 0.4, isMetallic: !isGym)]
         )
         ground.position = SIMD3<Float>(0, -0.125, -27)
         ground.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
@@ -628,17 +633,16 @@ final class ThirdPersonSceneController {
             environmentRoot.addChild(ent)
         }
 
-        // ── Hardwood floor + painted court lines ──────────────────────────────
-        deco("Floor", SIMD3(21.6, 0.04, 50), 0, 0.02, -24.5, floorWood)
-        deco("Court.SideL", SIMD3(0.12, 0.02, 46), -9.5, 0.05, -24, line)
-        deco("Court.SideR", SIMD3(0.12, 0.02, 46),  9.5, 0.05, -24, line)
-        deco("Court.BaseN", SIMD3(19, 0.02, 0.12), 0, 0.05, -1.0, line)
-        deco("Court.BaseF", SIMD3(19, 0.02, 0.12), 0, 0.05, -47.5, line)
-        deco("Court.Half",  SIMD3(19, 0.02, 0.12), 0, 0.05, -24, line)
-        cyld("Court.CircleOut", 0.02, 2.0, 0, 0.045, -24, line)
-        cyld("Court.CircleIn",  0.03, 1.7, 0, 0.05, -24, floorWood)
+        // ── Painted court lines (floor itself is the hardwood ground at Y=0) ───
+        deco("Court.SideL", SIMD3(0.12, 0.02, 46), -9.5, 0.012, -24, line)
+        deco("Court.SideR", SIMD3(0.12, 0.02, 46),  9.5, 0.012, -24, line)
+        deco("Court.BaseN", SIMD3(19, 0.02, 0.12), 0, 0.012, -1.0, line)
+        deco("Court.BaseF", SIMD3(19, 0.02, 0.12), 0, 0.012, -47.5, line)
+        deco("Court.Half",  SIMD3(19, 0.02, 0.12), 0, 0.012, -24, line)
+        cyld("Court.CircleOut", 0.012, 2.0, 0, 0.010, -24, line)
+        cyld("Court.CircleIn",  0.014, 1.7, 0, 0.012, -24, floorWood)
         // Green training-circuit line guiding to the exit
-        deco("Circuit", SIMD3(0.16, 0.02, 44), 0, 0.06, -24, green)
+        deco("Circuit", SIMD3(0.16, 0.02, 44), 0, 0.016, -24, green)
 
         // ── Walls: painted, padded base, accent stripes ───────────────────────
         solid("Wall.L",    SIMD3(0.5, 4, 52), -11, -25, wallPaint)
@@ -716,8 +720,8 @@ final class ThirdPersonSceneController {
         }
 
         // ── Sprint lane (z -25..-31): painted lane lines ──────────────────────
-        deco("Lane.L", SIMD3(0.1, 0.02, 7), -1.6, 0.05, -28, lineYellow)
-        deco("Lane.R", SIMD3(0.1, 0.02, 7),  1.6, 0.05, -28, lineYellow)
+        deco("Lane.L", SIMD3(0.1, 0.02, 7), -1.6, 0.012, -28, lineYellow)
+        deco("Lane.R", SIMD3(0.1, 0.02, 7),  1.6, 0.012, -28, lineYellow)
 
         // ── Track hurdle (z -34.5): jump it; red mat underneath is the hazard ─
         // Hazard volume + damage are driven by ChapterConfig.hazardVolume.
@@ -728,11 +732,11 @@ final class ThirdPersonSceneController {
         deco("Hurdle.bar",  SIMD3(7.2, 0.12, 0.12), 0, 1.0, -34.5, lineYellow)
         deco("Hurdle.endL", SIMD3(0.9, 0.13, 0.13), -2.9, 1.0, -34.5, padBlack)
         deco("Hurdle.endR", SIMD3(0.9, 0.13, 0.13),  2.9, 1.0, -34.5, padBlack)
-        deco("Hurdle.runup",   SIMD3(5.0, 0.05, 1.6), 0, 0.03, -32.4, matBlue)
-        deco("Hurdle.landing", SIMD3(5.0, 0.05, 2.0), 0, 0.03, -36.6, matBlue)
+        deco("Hurdle.runup",   SIMD3(5.0, 0.03, 1.6), 0, 0.015, -32.4, matBlue)
+        deco("Hurdle.landing", SIMD3(5.0, 0.03, 2.0), 0, 0.015, -36.6, matBlue)
 
         // ── Supply station (z -41): story-beat terminal placed here by config ─
-        deco("Cache.Mat", SIMD3(3.0, 0.04, 3.0), 0, 0.02, -41, matBlue)
+        deco("Cache.Mat", SIMD3(3.0, 0.03, 3.0), 0, 0.015, -41, matBlue)
         deco("Duffel", SIMD3(1.1, 0.45, 0.55), -1.5, 0.25, -41, stripeRed)
         deco("Plyo",   SIMD3(0.8, 0.8, 0.8), -1.7, 0.4, -42.3, wood)
         cyld("Cooler.body", 0.9, 0.22, 1.6, 0.45, -41, stripeBlue)
@@ -877,6 +881,11 @@ final class ThirdPersonSceneController {
         if playerVisualRoot.parent == nil { player.addChild(playerVisualRoot) }
 
         let H = Self.capsuleHeight
+
+        // Lift the visual so the feet bottom aligns with the capsule bottom (which rests
+        // on the ground). Without this the rig's lowest point sits ~0.075·H below the
+        // capsule and the feet sink into the floor.
+        playerVisualRoot.position = SIMD3(0, H * 0.075, 0)
 
         // Reset gear-slot part collections (buildPlayer runs once per scene).
         shirtParts.removeAll()
