@@ -38,9 +38,38 @@ final class GameSessionViewModel {
     /// Equipped apparel by slot (slot → itemId); drives the player rig's look.
     private(set) var equippedApparel: [GearSlot: String] = [:]
 
+    /// Ammo remaining per ranged-weapon itemId. Missing key = magazine still full.
+    private var ammoByItem: [String: Int] = [:]
+
     var equippedWeaponSummary: String? {
         guard let id = equippedWeaponItemId, let def = ItemCatalog.definition(for: id), def.category == .weapon else { return nil }
+        if let cap = def.magazineCapacity {
+            return "\(def.displayName) \(ammo(for: id))/\(cap)"
+        }
         return def.displayName
+    }
+
+    /// Returns the currently equipped weapon's itemId iff it has a ranged profile.
+    var equippedRangedWeaponId: String? {
+        guard let id = equippedWeaponItemId,
+              let def = ItemCatalog.definition(for: id),
+              def.rangedDamage != nil else { return nil }
+        return id
+    }
+
+    /// Rounds remaining for this weapon (magazine capacity if untouched).
+    func ammo(for itemId: String) -> Int {
+        if let count = ammoByItem[itemId] { return count }
+        return ItemCatalog.definition(for: itemId)?.magazineCapacity ?? 0
+    }
+
+    /// Spend one round. Returns false (and changes nothing) if the magazine is empty.
+    @discardableResult
+    func consumeAmmo(for itemId: String) -> Bool {
+        let current = ammo(for: itemId)
+        guard current > 0 else { return false }
+        ammoByItem[itemId] = current - 1
+        return true
     }
 
     var equippedToolSummary: String? {

@@ -291,7 +291,7 @@ final class FrameClock: NSObject {
 /// One-shot sound cues. Sounds are synthesized procedurally (no asset files), so
 /// new cues just need a recipe in `AudioEngine.buildBuffer`.
 enum SoundCue {
-    case strikeHit, strikeWhiff, jump, land, hazard, dialogOpen, dialogClose, pickup, equip
+    case strikeHit, strikeWhiff, jump, land, hazard, dialogOpen, dialogClose, pickup, equip, gunshot, dryFire
 }
 
 /// Lightweight procedural-audio engine. Pre-builds PCM buffers for each cue at
@@ -397,6 +397,15 @@ final class AudioEngine {
         buffers[.equip]       = buildBuffer(duration: 0.10) { t, _ in
             let env = max(0, 1 - t / 0.10)
             return sinf(2 * .pi * 840 * t) * 0.22 * env
+        }
+        buffers[.gunshot]     = buildBuffer(duration: 0.18) { t, _ in
+            let crack = Float.random(in: -1 ... 1) * expf(-55 * t) * 0.75   // sharp transient
+            let body  = sinf(2 * .pi * 75 * t) * expf(-9 * t) * 0.45        // low boom
+            let tail  = Float.random(in: -1 ... 1) * expf(-7 * t) * 0.18    // smoke tail
+            return crack + body + tail
+        }
+        buffers[.dryFire]     = buildBuffer(duration: 0.08) { t, _ in
+            return Float.random(in: -1 ... 1) * expf(-45 * t) * 0.35
         }
     }
 

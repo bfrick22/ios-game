@@ -18,6 +18,11 @@ struct TraversalTouchOverlay: View {
                     cameraLookPad
                 }
 
+                // Aim reticle: only visible when a ranged weapon is equipped. Sits at
+                // the dead center of the screen, where the camera's forward ray lands.
+                aimReticle
+                    .frame(width: geo.size.width, height: geo.size.height)
+
                 ZStack(alignment: .bottom) {
                     HStack(alignment: .bottom, spacing: 0) {
                         virtualStick
@@ -117,7 +122,7 @@ struct TraversalTouchOverlay: View {
         Button {
             viewModel.attackRequested = true
         } label: {
-            Label("Strike", systemImage: "figure.boxing")
+            Label(attackLabelText, systemImage: attackLabelIcon)
                 .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
                 .frame(width: 72, height: 56)
@@ -131,8 +136,36 @@ struct TraversalTouchOverlay: View {
         }
         .buttonStyle(.plain)
         .disabled(!viewModel.isGrounded || viewModel.isClimbing)
-        .accessibilityLabel("Melee strike")
-        .accessibilityHint("Grounded strike with equipped weapon or fists.")
+        .accessibilityLabel(viewModel.equippedRangedWeaponId != nil ? "Fire" : "Melee strike")
+        .accessibilityHint(viewModel.equippedRangedWeaponId != nil
+            ? "Fires the equipped ranged weapon."
+            : "Grounded strike with equipped weapon or fists.")
+    }
+
+    private var attackLabelText: String {
+        viewModel.equippedRangedWeaponId != nil ? "Fire" : "Strike"
+    }
+
+    private var attackLabelIcon: String {
+        viewModel.equippedRangedWeaponId != nil ? "scope" : "figure.boxing"
+    }
+
+    /// Center-screen reticle: shows where the bullet will go (camera-forward aim).
+    /// Only visible when a ranged weapon is equipped.
+    @ViewBuilder
+    private var aimReticle: some View {
+        if viewModel.equippedRangedWeaponId != nil {
+            ZStack {
+                Circle()
+                    .strokeBorder(.white.opacity(0.85), lineWidth: 1.4)
+                    .frame(width: 22, height: 22)
+                Circle()
+                    .fill(.white.opacity(0.95))
+                    .frame(width: 3, height: 3)
+            }
+            .shadow(color: .black.opacity(0.55), radius: 2)
+            .allowsHitTesting(false)
+        }
     }
 
     private var jumpButton: some View {

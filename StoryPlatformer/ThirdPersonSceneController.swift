@@ -103,6 +103,11 @@ final class ThirdPersonSceneController {
     private var hostileContactCooldown: Float = 0
     private var wasGrounded: Bool = true   // tracks prev-frame grounded for land-sound detection
 
+    /// Ranged-fire state: anim hold timer and per-shot cooldown.
+    private var rangedAnimTimer: Float = 0
+    private var rangedCooldown: Float = 0
+    private static let rangedAnimDuration: Float = 0.30
+
     /// Interactable NPCs (friendlies + dialog enemies), and dialog bookkeeping.
     private var npcRuntimes: [NPCRuntime] = []
     private var nearestNPCId: String?
@@ -329,6 +334,8 @@ final class ThirdPersonSceneController {
         if hazardCooldownRemaining > 0 { hazardCooldownRemaining = max(0, hazardCooldownRemaining - deltaTime) }
         if meleeCooldownRemaining > 0  { meleeCooldownRemaining  = max(0, meleeCooldownRemaining  - deltaTime) }
         if hostileContactCooldown > 0  { hostileContactCooldown  = max(0, hostileContactCooldown  - deltaTime) }
+        if rangedAnimTimer > 0         { rangedAnimTimer         = max(0, rangedAnimTimer - deltaTime) }
+        if rangedCooldown > 0          { rangedCooldown          = max(0, rangedCooldown - deltaTime) }
         updateComboAnimation(deltaTime: deltaTime)
 
         processHazard(viewModel: viewModel)
@@ -1512,6 +1519,18 @@ final class ThirdPersonSceneController {
             }
         }
 
+        // Ranged aim pose — right arm raises into a firing extension during the shot.
+        // Curve: quick raise → hold at peak → ease back. Doesn't disturb left arm.
+        if rangedAnimTimer > 0 {
+            let u = 1 - rangedAnimTimer / Self.rangedAnimDuration   // 0 at start → 1 at end
+            let pose: Float
+            if u < 0.2      { pose = u / 0.2 }                       // quick raise
+            else if u < 0.6 { pose = 1 }                             // hold extended
+            else            { pose = max(0, 1 - (u - 0.6) / 0.4) }    // ease back
+            rShoulderAngle = 1.40 * pose
+            rElbowAngle    = Self.elbowRestBend + (-0.05 - Self.elbowRestBend) * pose
+        }
+
         let xAxis = SIMD3<Float>(1, 0, 0)
         playerLeftShoulder.transform.rotation  = simd_quatf(angle: lShoulderAngle, axis: xAxis)
         playerRightShoulder.transform.rotation = simd_quatf(angle: rShoulderAngle, axis: xAxis)
@@ -1566,6 +1585,12 @@ final class ThirdPersonSceneController {
         guard viewModel.attackRequested else { return }
         viewModel.attackRequested = false
         guard grounded else { return }
+
+        // Ranged weapon equipped → fire instead of starting a melee combo.
+        if viewModel.equippedRangedWeaponId != nil {
+            fire(viewModel: viewModel)
+            return
+        }
 
         if comboStep == 0 {
             guard meleeCooldownRemaining <= 0 else { return }
@@ -1627,6 +1652,112 @@ final class ThirdPersonSceneController {
             let miss = step == 1 ? "Jab." : step == 2 ? "Cross." : "Kick."
             viewModel.flashInteractMessage(miss)
             AudioEngine.shared.play(.strikeWhiff)
+        }
+    }
+
+    // MARK: - Ranged
+
+    private func fire(viewModel: GameSessionViewModel) {
+        guard rangedCooldown <= 0 else { return }
+        guard let id = viewModel.equippedRangedWeaponId,
+              let def = ItemCatalog.definition(for: id) else { return }
+
+        rangedCooldown = 0.40
+
+        // Out of ammo → dry click.
+        guard viewModel.consumeAmmo(for: id) else {
+            viewModel.flashInteractMessage("Out of ammo.")
+            AudioEngine.shared.play(.dryFire)
+            return
+        }
+
+        rangedAnimTimer = Self.rangedAnimDuration
+
+        // Snap-face the body to the camera so the shot direction matches what you see.
+        playerFacingVector = cameraRig.groundForward
+
+        // Muzzle origin: approx right-hand position at shoulder height, slightly forward.
+        let H = Self.capsuleHeight
+        let facing = playerFacingVector
+        let rightVec = SIMD3<Float>(facing.z, 0, -facing.x)
+        let muzzle = player.position
+            + SIMD3<Float>(0, H * 0.275, 0)
+            + facing * (H * 0.42)
+            + rightVec * (H * 0.165)
+
+        AudioEngine.shared.play(.gunshot)
+        spawnImpactEffect(at: muzzle)         // doubles as a muzzle flash
+        cameraRig.addShake(0.07)
+        hitHaptics.impactOccurred(intensity: 1.0)
+        hitHaptics.prepare()
+
+        // Hit detection: closest enemy whose center is within hitRadius of the ray.
+        // Damage is CONSTANT over the whole range — close and far shots deal the same
+        // (intentional; real firearm round, no falloff). Tune by tweaking `rangedDamage`.
+        let maxRange: Float = 30
+        let hitRadius: Float = 0.7
+        let dmg = def.rangedDamage ?? 0.5
+
+        var bestIndex: Int?
+        var bestAlong: Float = .infinity
+        var bestPoint = SIMD3<Float>.zero
+        for (i, er) in enemyRuntimes.enumerated() {
+            guard er.health > 0, er.entity.isEnabled else { continue }
+            let toEnemy = er.entity.position - muzzle
+            let along = simd_dot(toEnemy, facing)
+            guard along > 0, along <= maxRange else { continue }
+            let closest = muzzle + facing * along
+            let perp = simd_length(er.entity.position - closest)
+            if perp <= hitRadius, along < bestAlong {
+                bestAlong = along
+                bestIndex = i
+                bestPoint = closest
+            }
+        }
+
+        if let i = bestIndex {
+            enemyRuntimes[i].health -= dmg
+            enemyRuntimes[i].flash = 1
+            let down = enemyRuntimes[i].health <= 0
+            if down {
+                enemyRuntimes[i].entity.isEnabled = false
+                viewModel.flashInteractMessage("Hostile down.")
+            } else {
+                viewModel.flashInteractMessage("Hit!")
+            }
+            spawnTracer(from: muzzle, to: bestPoint)
+            strikeFeedback(at: bestPoint, shake: 0.05)
+        } else {
+            let endPoint = muzzle + facing * maxRange
+            spawnTracer(from: muzzle, to: endPoint)
+            viewModel.flashInteractMessage("Miss.")
+        }
+    }
+
+    /// A brief bright box from muzzle to hit-point; removes itself after a short flash.
+    private func spawnTracer(from start: SIMD3<Float>, to end: SIMD3<Float>) {
+        let delta = end - start
+        let dist = simd_length(delta)
+        guard dist > 0.01 else { return }
+        let dir = delta / dist
+        let tracer = ModelEntity(
+            mesh: .generateBox(size: SIMD3(0.015, 0.015, dist), cornerRadius: 0.005),
+            materials: [UnlitMaterial(color: UIColor(red: 1.0, green: 0.85, blue: 0.35, alpha: 1))]
+        )
+        tracer.position = (start + end) * 0.5
+        let forwardZ = SIMD3<Float>(0, 0, 1)
+        let dot = simd_dot(forwardZ, dir)
+        if abs(dot + 1) < 0.0001 {
+            tracer.transform.rotation = simd_quatf(angle: .pi, axis: SIMD3(0, 1, 0))
+        } else {
+            let cross = simd_cross(forwardZ, dir)
+            let s = sqrt((1 + dot) * 2)
+            tracer.transform.rotation = simd_quatf(ix: cross.x / s, iy: cross.y / s, iz: cross.z / s, r: s / 2)
+        }
+        root.addChild(tracer)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            tracer.removeFromParent()
         }
     }
 

@@ -38,6 +38,10 @@ struct ItemDefinition: Sendable, Hashable, Equatable {
     var missionUseMessage: String?
     /// Weapon: damage per grounded melee strike (normalized 0…1 vs enemy).
     var meleeDamage: Float?
+    /// Weapon (ranged): damage per shot (normalized 0…1 vs enemy).
+    var rangedDamage: Float? = nil
+    /// Weapon (ranged): rounds available before going dry (no reload system yet).
+    var magazineCapacity: Int? = nil
     /// Apparel: which rig slot this equips to.
     var gearSlot: GearSlot? = nil
     /// Apparel: color applied to the slot's parts (or the mask mesh).
@@ -170,8 +174,8 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: 0.28
         ),
-        // Gun: grounded post-EMP firearm. NOTE: ranged fire is not implemented yet —
-        // currently equips and pistol-whips via the melee system; ranged is a future system.
+        // Gun: grounded post-EMP firearm. Ranged via hitscan; finite magazine, no
+        // reload yet (running dry is the limit). Pistol-whip damage is the melee fallback.
         "item.pistol": ItemDefinition(
             id: "item.pistol",
             displayName: "Pistol",
@@ -180,7 +184,9 @@ enum ItemCatalog {
             systemImageName: "scope",
             healFraction: nil,
             missionUseMessage: nil,
-            meleeDamage: 0.14
+            meleeDamage: 0.14,
+            rangedDamage: 0.7,
+            magazineCapacity: 12
         ),
         // ── Apparel (equippable; recolors the matching rig parts) ─────────────
         "item.work_shirt": ItemDefinition(
