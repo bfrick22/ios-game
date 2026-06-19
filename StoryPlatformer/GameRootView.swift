@@ -1,3 +1,4 @@
+import AVFoundation
 import QuartzCore
 import RealityKit
 import SwiftUI
@@ -72,6 +73,7 @@ struct GameRootView: View {
             if shown {
                 frameClock.stop()
             } else {
+                _ = AudioEngine.shared   // warm up the audio engine before first cue
                 frameClock.start { sceneController.tick(viewModel: viewModel) }
             }
         }
@@ -283,6 +285,132 @@ final class FrameClock: NSObject {
 
     @objc private func step() {
         onFrame?()
+    }
+}
+
+/// One-shot sound cues. Sounds are synthesized procedurally (no asset files), so
+/// new cues just need a recipe in `AudioEngine.buildBuffer`.
+enum SoundCue {
+    case strikeHit, strikeWhiff, jump, land, hazard, dialogOpen, dialogClose, pickup, equip
+}
+
+/// Lightweight procedural-audio engine. Pre-builds PCM buffers for each cue at
+/// init and plays them through a small pool of `AVAudioPlayerNode`s so overlapping
+/// sounds don't cut each other off. Real SFX assets can drop in later by swapping
+/// the recipe functions for `AVAudioFile`/buffer loaders.
+@MainActor
+final class AudioEngine {
+    static let shared = AudioEngine()
+
+    private let engine = AVAudioEngine()
+    private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+    private var buffers: [SoundCue: AVAudioPCMBuffer] = [:]
+    private var players: [AVAudioPlayerNode] = []
+    private var nextPlayer = 0
+
+    private init() {
+        configureSession()
+        buildAllBuffers()
+        attachPlayers(count: 6)
+        do { try engine.start() } catch { /* silent — game runs fine without audio */ }
+    }
+
+    func play(_ cue: SoundCue, volume: Float = 1.0) {
+        guard let buffer = buffers[cue], engine.isRunning else { return }
+        let player = players[nextPlayer]
+        nextPlayer = (nextPlayer + 1) % players.count
+        player.stop()
+        player.volume = volume
+        player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
+        player.play()
+    }
+
+    // MARK: setup
+
+    private func configureSession() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+        try? session.setActive(true)
+    }
+
+    private func attachPlayers(count: Int) {
+        for _ in 0 ..< count {
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: format)
+            players.append(player)
+        }
+    }
+
+    private func buildAllBuffers() {
+        buffers[.strikeHit]   = buildBuffer(duration: 0.20) { t, _ in
+            let body = sin(2 * .pi * 95 * t) * expf(-12 * t)
+            let pop  = Float.random(in: -1 ... 1) * expf(-30 * t)
+            return body * 0.55 + pop * 0.5
+        }
+        buffers[.strikeWhiff] = buildBuffer(duration: 0.15) { t, _ in
+            let env = max(0, sinf(.pi * t / 0.15))
+            let tone = sinf(2 * .pi * (350 - 250 * (t / 0.15)) * t) * 0.18
+            let noise = Float.random(in: -1 ... 1) * 0.22
+            return (tone + noise) * env
+        }
+        buffers[.jump]        = buildBuffer(duration: 0.12) { t, _ in
+            let f0: Float = 220, f1: Float = 520
+            let k = (f1 - f0) / 0.12
+            let phase = 2 * .pi * (f0 * t + 0.5 * k * t * t)
+            let env = max(0, 1 - t / 0.12)
+            return sinf(phase) * env * 0.35
+        }
+        buffers[.land]        = buildBuffer(duration: 0.22) { t, _ in
+            let body = sinf(2 * .pi * 60 * t) * expf(-10 * t)
+            let pop  = Float.random(in: -1 ... 1) * expf(-22 * t)
+            return body * 0.5 + pop * 0.3
+        }
+        buffers[.hazard]      = buildBuffer(duration: 0.30) { t, _ in
+            let env = max(0, 1 - t / 0.30)
+            let mod = sinf(2 * .pi * 70 * t) > 0 ? Float(1.0) : Float(0.3)
+            let buzz = sinf(2 * .pi * 1100 * t) * mod * 0.28
+            let fall = sinf(2 * .pi * (520 - 360 * (t / 0.30)) * t) * 0.25
+            return (buzz + fall) * env
+        }
+        buffers[.dialogOpen]  = buildBuffer(duration: 0.18) { t, _ in
+            let env: Float = t < 0.04 ? Float(t / 0.04) : max(0, 1 - Float((t - 0.04) / 0.14))
+            return (sinf(2 * .pi * 620 * t) + sinf(2 * .pi * 930 * t)) * 0.18 * env
+        }
+        buffers[.dialogClose] = buildBuffer(duration: 0.15) { t, _ in
+            let env = max(0, 1 - t / 0.15)
+            let f0: Float = 720, k: Float = -2000
+            let phase = 2 * .pi * (f0 * t + 0.5 * k * t * t)
+            return sinf(phase) * 0.22 * env
+        }
+        buffers[.pickup]      = buildBuffer(duration: 0.20) { t, _ in
+            if t < 0.08 {
+                let env = max(0, 1 - t / 0.08)
+                return sinf(2 * .pi * 720 * t) * 0.30 * env
+            } else if t > 0.10 && t < 0.18 {
+                let t2 = t - 0.10
+                let env = max(0, 1 - t2 / 0.08)
+                return sinf(2 * .pi * 1080 * t2) * 0.30 * env
+            }
+            return 0
+        }
+        buffers[.equip]       = buildBuffer(duration: 0.10) { t, _ in
+            let env = max(0, 1 - t / 0.10)
+            return sinf(2 * .pi * 840 * t) * 0.22 * env
+        }
+    }
+
+    private func buildBuffer(duration: Double, fill: (Float, Int) -> Float) -> AVAudioPCMBuffer? {
+        let sampleRate = format.sampleRate
+        let frameCount = AVAudioFrameCount(sampleRate * duration)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return nil }
+        buffer.frameLength = frameCount
+        let data = buffer.floatChannelData![0]
+        for i in 0 ..< Int(frameCount) {
+            let t = Float(i) / Float(sampleRate)
+            data[i] = fill(t, i)
+        }
+        return buffer
     }
 }
 

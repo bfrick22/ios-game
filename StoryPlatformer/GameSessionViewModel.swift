@@ -322,6 +322,7 @@ final class GameSessionViewModel {
                 equippedWeaponItemId = stack.itemId
                 flashInteractMessage("Equipped \(def.displayName).")
             }
+            AudioEngine.shared.play(.equip)
 
         case .tool:
             if equippedToolItemId == stack.itemId {
@@ -331,6 +332,7 @@ final class GameSessionViewModel {
                 equippedToolItemId = stack.itemId
                 flashInteractMessage("Equipped \(def.displayName).")
             }
+            AudioEngine.shared.play(.equip)
 
         case .apparel:
             guard let slot = def.gearSlot else {
@@ -344,6 +346,7 @@ final class GameSessionViewModel {
                 equippedApparel[slot] = stack.itemId
                 flashInteractMessage("Equipped \(def.displayName).")
             }
+            AudioEngine.shared.play(.equip)
 
         case .mission:
             flashInteractMessage(def.missionUseMessage ?? "\(def.displayName) — needed for the route ahead.")

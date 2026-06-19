@@ -101,6 +101,7 @@ final class ThirdPersonSceneController {
     private var tripwireRegion: AxisAlignedRegion?
     private var meleeCooldownRemaining: Float = 0
     private var hostileContactCooldown: Float = 0
+    private var wasGrounded: Bool = true   // tracks prev-frame grounded for land-sound detection
 
     /// Interactable NPCs (friendlies + dialog enemies), and dialog bookkeeping.
     private var npcRuntimes: [NPCRuntime] = []
@@ -319,6 +320,8 @@ final class ThirdPersonSceneController {
         let grounded = computeGrounded()
         viewModel.isGrounded = grounded
         dampLandingVerticalVelocityIfNeeded(grounded: grounded)
+        if grounded && !wasGrounded { AudioEngine.shared.play(.land) }
+        wasGrounded = grounded
 
         updatePlayerFacing(viewModel: viewModel)
         updatePlayerVisual(deltaTime: deltaTime, viewModel: viewModel)
@@ -1216,6 +1219,7 @@ final class ThirdPersonSceneController {
             line: npc.config.openingLine,
             choices: npc.config.choices.map { DialogChoiceVM(id: $0.id, label: $0.label) }
         )
+        AudioEngine.shared.play(.dialogOpen)
     }
 
     private func processDialog(viewModel: GameSessionViewModel) {
@@ -1236,6 +1240,7 @@ final class ThirdPersonSceneController {
         if viewModel.dialogCloseRequested {
             viewModel.dialogCloseRequested = false
             viewModel.activeDialog = nil
+            AudioEngine.shared.play(.dialogClose)
             if let hid = pendingHostileNPCId,
                let npc = npcRuntimes.first(where: { $0.id == hid }) {
                 turnNPCHostile(npc)
@@ -1385,6 +1390,7 @@ final class ThirdPersonSceneController {
         if motion.linearVelocity.y > 0.32 { return }
         let deltaVy = 5.4 - motion.linearVelocity.y
         player.applyLinearImpulse(SIMD3<Float>(0, Self.playerMass * deltaVy, 0), relativeTo: nil)
+        AudioEngine.shared.play(.jump)
     }
 
     // MARK: - Facing / visual
@@ -1620,15 +1626,17 @@ final class ThirdPersonSceneController {
         if !hit {
             let miss = step == 1 ? "Jab." : step == 2 ? "Cross." : "Kick."
             viewModel.flashInteractMessage(miss)
+            AudioEngine.shared.play(.strikeWhiff)
         }
     }
 
-    /// Universal hit juice: spark burst at the contact point, haptic, camera kick.
+    /// Universal hit juice: spark burst at the contact point, haptic, camera kick, thud.
     private func strikeFeedback(at point: SIMD3<Float>, shake: Float) {
         spawnImpactEffect(at: point)
         hitHaptics.impactOccurred(intensity: 1.0)
         hitHaptics.prepare()
         cameraRig.addShake(shake)
+        AudioEngine.shared.play(.strikeHit)
     }
 
     private func spawnImpactEffect(at point: SIMD3<Float>) {
@@ -1845,6 +1853,7 @@ final class ThirdPersonSceneController {
 
         if viewModel.addItemsAtomicallyIfPossible(itemIds: grantIds) {
             storyBeatRewardClaimed = true
+            AudioEngine.shared.play(.pickup)
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))
                 viewModel.flashInteractMessage("Supplies added to inventory.")
@@ -1866,6 +1875,7 @@ final class ThirdPersonSceneController {
 
         hazardCooldownRemaining = 1.15
         viewModel.flashInteractMessage("Live wires — get clear!")
+        AudioEngine.shared.play(.hazard)
 
         if let motion = player.components[PhysicsMotionComponent.self] {
             let vy = motion.linearVelocity.y
