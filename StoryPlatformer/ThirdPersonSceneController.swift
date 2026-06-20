@@ -55,6 +55,30 @@ private struct StrikeDummy {
     var flash: Float = 0
 }
 
+/// Classifies a floating world-space indicator so it can be color-coded + filtered.
+private enum InteractKind {
+    case friendly      // chat with a friendly NPC
+    case dialogEnemy   // talk to a wary stranger (may turn hostile)
+    case supply        // grab supplies / story-beat reward
+
+    var color: UIColor {
+        switch self {
+        case .friendly:    return UIColor(red: 0.20, green: 0.95, blue: 0.55, alpha: 1)
+        case .dialogEnemy: return UIColor(red: 1.00, green: 0.55, blue: 0.10, alpha: 1)
+        case .supply:      return UIColor(red: 1.00, green: 0.85, blue: 0.20, alpha: 1)
+        }
+    }
+}
+
+/// One pulsing/bobbing orb above an interactable; child of the interactable's owner entity.
+private struct InteractIndicator {
+    let entity: ModelEntity
+    let owner: Entity
+    let baseLocalY: Float
+    var phase: Float
+    let kind: InteractKind
+}
+
 /// Owns RealityKit entities and physics for one loaded chapter in 3rd-person view.
 @MainActor
 final class ThirdPersonSceneController {
@@ -141,6 +165,9 @@ final class ThirdPersonSceneController {
     private var playerRightHand: ModelEntity?
     private var heldWeaponEntity: Entity?
     private var lastEquippedWeaponId: String?
+
+    /// Floating "you can interact here" indicators above NPCs / pickups.
+    private var interactIndicators: [InteractIndicator] = []
 
     // Combo attack state: 0=idle, 1=leftJab, 2=rightCross, 3=leftKick
     private var comboStep: Int = 0
@@ -266,9 +293,14 @@ final class ThirdPersonSceneController {
             boundsMax: chapter.completionVolume.max.simd
         )
 
+        // Clear stale interact indicators (e.g. supply orb from a prior chapter); NPC
+        // ones are rebuilt by rebuildNPCs / appendNPC further below.
+        removeAllInteractIndicators()
+
         if let beat = chapter.storyBeat {
             interactProp.isEnabled = true
             interactProp.position = beat.worldPosition.simd
+            addInteractIndicator(owner: interactProp, kind: .supply, height: 0.95)
         } else {
             interactProp.isEnabled = false
         }
@@ -356,6 +388,7 @@ final class ThirdPersonSceneController {
 
         updateStrikeDummies(deltaTime)
         updateImpactEffects(deltaTime)
+        updateInteractIndicators(deltaTime)
 
         // Camera is fully player-controlled (look pad); the body aligns to the camera
         // in applyMovement, so auto-recenter would be redundant.
@@ -1083,6 +1116,61 @@ final class ThirdPersonSceneController {
         for p in parts { p.model?.materials = [mat] }
     }
 
+    // MARK: - Interact indicators
+
+    private func addInteractIndicator(owner: Entity, kind: InteractKind, height: Float) {
+        let sphere = ModelEntity(
+            mesh: .generateSphere(radius: 0.05),
+            materials: [UnlitMaterial(color: kind.color)]
+        )
+        sphere.position = SIMD3(0, height, 0)
+        owner.addChild(sphere)
+        interactIndicators.append(InteractIndicator(
+            entity: sphere,
+            owner: owner,
+            baseLocalY: height,
+            phase: Float.random(in: 0 ... (2 * .pi)),
+            kind: kind
+        ))
+    }
+
+    private func removeIndicators(forOwner owner: Entity) {
+        for ind in interactIndicators where ind.owner === owner {
+            ind.entity.removeFromParent()
+        }
+        interactIndicators.removeAll { $0.owner === owner }
+    }
+
+    private func removeAllInteractIndicators() {
+        for ind in interactIndicators { ind.entity.removeFromParent() }
+        interactIndicators.removeAll()
+    }
+
+    /// Per-tick bob + pulse; grows when the player is within interact reach; supply
+    /// indicator auto-hides once the story-beat reward has been claimed.
+    private func updateInteractIndicators(_ deltaTime: Float) {
+        guard !interactIndicators.isEmpty else { return }
+        for i in interactIndicators.indices {
+            let ind = interactIndicators[i]
+            // Hide a supply indicator once the cache has been looted.
+            let shouldShow = ind.kind != .supply || !storyBeatRewardClaimed
+            ind.entity.isEnabled = shouldShow
+            guard shouldShow else { continue }
+
+            interactIndicators[i].phase += deltaTime * 2.4
+            let phase = interactIndicators[i].phase
+            let bob = sin(phase) * 0.04
+            let basePulse: Float = 1.0 + 0.12 * sin(phase * 1.3)
+
+            let ownerPos = ind.owner.position(relativeTo: nil)
+            let inRange = withinInteractReach(player: player.position, target: ownerPos)
+            let scale: Float = inRange ? 1.6 : basePulse
+
+            ind.entity.position.y = ind.baseLocalY + bob
+            ind.entity.scale = SIMD3(repeating: scale)
+        }
+    }
+
     /// Swaps the visible weapon mesh in the right hand when the equipped weapon changes.
     private func applyHeldWeaponIfChanged(_ viewModel: GameSessionViewModel) {
         let current = viewModel.equippedWeaponItemId
@@ -1227,6 +1315,7 @@ final class ThirdPersonSceneController {
     // MARK: - NPCs / dialog
 
     private func removeAllNPCs() {
+        for npc in npcRuntimes { removeIndicators(forOwner: npc.root) }
         for npc in npcRuntimes { npc.root.removeFromParent() }
         npcRuntimes.removeAll()
         nearestNPCId = nil
@@ -1280,6 +1369,10 @@ final class ThirdPersonSceneController {
 
         self.root.addChild(root)
         npcRuntimes.append(NPCRuntime(id: config.id, config: config, root: root, torso: torso, bodyColor: shirt))
+
+        addInteractIndicator(owner: root,
+                             kind: config.isFriendly ? .friendly : .dialogEnemy,
+                             height: 1.45)
     }
 
     /// Convert a dialog enemy into a patrolling hostile, reusing its figure.
@@ -1298,6 +1391,7 @@ final class ThirdPersonSceneController {
         ))
         npcRuntimes.removeAll { $0.id == npc.id }
         if nearestNPCId == npc.id { nearestNPCId = nil }
+        removeIndicators(forOwner: npc.root)
     }
 
     private func openDialog(for npc: NPCRuntime, viewModel: GameSessionViewModel) {

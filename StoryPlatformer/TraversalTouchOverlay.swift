@@ -198,6 +198,7 @@ struct TraversalTouchOverlay: View {
                 .padding(.horizontal, 4)
                 .frame(width: 72, height: 56)
                 .background(viewModel.interactPrompt.isEmpty ? Color.gray.opacity(0.35) : Color.accentColor.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .symbolEffect(.pulse, options: .repeating, isActive: !viewModel.interactPrompt.isEmpty)
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 1))
         }
         .buttonStyle(.plain)
