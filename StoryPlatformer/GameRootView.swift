@@ -246,10 +246,17 @@ struct GameRootView: View {
         if w != nil || t != nil || armor > 0 {
             HStack(spacing: 8) {
                 if let w {
-                    Label(w, systemImage: "figure.fencing")
+                    // Use the actual weapon's symbol (knife / baton / pistol all render correctly).
+                    let icon = viewModel.equippedWeaponItemId
+                        .flatMap { ItemCatalog.definition(for: $0)?.systemImageName }
+                        ?? "figure.fencing"
+                    Label(w, systemImage: icon)
                 }
                 if let t {
-                    Label(t, systemImage: "flashlight.on.fill")
+                    let icon = viewModel.equippedToolItemId
+                        .flatMap { ItemCatalog.definition(for: $0)?.systemImageName }
+                        ?? "flashlight.on.fill"
+                    Label(t, systemImage: icon)
                 }
                 if armor > 0 {
                     Label("\(Int(round(armor * 100)))% armor", systemImage: "shield.lefthalf.filled")

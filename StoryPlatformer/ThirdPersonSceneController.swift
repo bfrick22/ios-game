@@ -137,6 +137,11 @@ final class ThirdPersonSceneController {
     private var handParts: [ModelEntity] = []
     private var lastAppliedApparel: [GearSlot: String]?
 
+    /// Right hand mount + currently held weapon visual (swapped when equip changes).
+    private var playerRightHand: ModelEntity?
+    private var heldWeaponEntity: Entity?
+    private var lastEquippedWeaponId: String?
+
     // Combo attack state: 0=idle, 1=leftJab, 2=rightCross, 3=leftKick
     private var comboStep: Int = 0
     private var comboAnimTimer: Float = 0
@@ -306,6 +311,7 @@ final class ThirdPersonSceneController {
         }
 
         applyApparelIfChanged(viewModel)
+        applyHeldWeaponIfChanged(viewModel)
 
         // Conversation is modal: freeze control, only advance the dialog + camera.
         if viewModel.activeDialog != nil {
@@ -971,7 +977,7 @@ final class ThirdPersonSceneController {
         playerLeftShoulder.position  = SIMD3(-H * 0.165, H * 0.20, 0)
         playerRightShoulder.position = SIMD3( H * 0.165, H * 0.20, 0)
 
-        func buildArm(shoulder: Entity, upper: ModelEntity, elbow: Entity) {
+        func buildArm(shoulder: Entity, upper: ModelEntity, elbow: Entity) -> ModelEntity {
             let deltoid = sph(H * 0.062, shirt)         // deltoid at the joint
             shoulder.addChild(deltoid)
             shirtParts.append(deltoid)
@@ -993,13 +999,14 @@ final class ThirdPersonSceneController {
             hand.position = SIMD3(0, -foreLen - H * 0.03, 0)
             elbow.addChild(hand)
             handParts.append(hand)
+            return hand
         }
         playerLeftArm.name  = "PlayerLeftArm"
         playerRightArm.name = "PlayerRightArm"
         playerLeftElbow.name  = "LeftElbow"
         playerRightElbow.name = "RightElbow"
-        buildArm(shoulder: playerLeftShoulder, upper: playerLeftArm, elbow: playerLeftElbow)
-        buildArm(shoulder: playerRightShoulder, upper: playerRightArm, elbow: playerRightElbow)
+        _ = buildArm(shoulder: playerLeftShoulder, upper: playerLeftArm, elbow: playerLeftElbow)
+        playerRightHand = buildArm(shoulder: playerRightShoulder, upper: playerRightArm, elbow: playerRightElbow)
 
         // ── Legs: pants thigh+shin, boot feet ─────────────────────────────────
         let thighLen = H * 0.255, rThigh = H * 0.072
@@ -1074,6 +1081,88 @@ final class ThirdPersonSceneController {
     private func recolor(_ parts: [ModelEntity], _ color: UIColor, roughness: Float) {
         let mat = SimpleMaterial(color: color, roughness: MaterialScalarParameter(floatLiteral: roughness), isMetallic: false)
         for p in parts { p.model?.materials = [mat] }
+    }
+
+    /// Swaps the visible weapon mesh in the right hand when the equipped weapon changes.
+    private func applyHeldWeaponIfChanged(_ viewModel: GameSessionViewModel) {
+        let current = viewModel.equippedWeaponItemId
+        if current == lastEquippedWeaponId { return }
+        lastEquippedWeaponId = current
+
+        heldWeaponEntity?.removeFromParent()
+        heldWeaponEntity = nil
+
+        guard let id = current, let hand = playerRightHand,
+              let visual = makeWeaponVisual(for: id) else { return }
+        hand.addChild(visual)
+        heldWeaponEntity = visual
+    }
+
+    /// Procedural weapon mesh; positioned so the grip sits in the fist and the
+    /// blade/rod/barrel extends along the hand's local -Y (downward at rest →
+    /// thrust forward when the elbow extends during a punch / aim).
+    private func makeWeaponVisual(for itemId: String) -> Entity? {
+        switch itemId {
+        case "item.knife":
+            let root = Entity()
+            let grip   = UIColor(red: 0.16, green: 0.14, blue: 0.13, alpha: 1)
+            let blade  = UIColor(white: 0.78, alpha: 1)
+            let handle = ModelEntity(mesh: .generateBox(size: SIMD3(0.022, 0.07, 0.022), cornerRadius: 0.004),
+                                     materials: [SimpleMaterial(color: grip, roughness: 0.7, isMetallic: false)])
+            handle.position = SIMD3(0, -0.02, 0)
+            root.addChild(handle)
+            let bladeMesh = ModelEntity(mesh: .generateBox(size: SIMD3(0.018, 0.15, 0.004), cornerRadius: 0.001),
+                                        materials: [SimpleMaterial(color: blade, roughness: 0.18, isMetallic: true)])
+            bladeMesh.position = SIMD3(0, -0.13, 0)
+            root.addChild(bladeMesh)
+            return root
+
+        case "item.baton":
+            let rod = ModelEntity(mesh: .generateCylinder(height: 0.36, radius: 0.018),
+                                  materials: [SimpleMaterial(color: UIColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 1),
+                                                              roughness: 0.5, isMetallic: false)])
+            rod.position = SIMD3(0, -0.20, 0)
+            return rod
+
+        case "item.stick":
+            let rod = ModelEntity(mesh: .generateCylinder(height: 0.50, radius: 0.018),
+                                  materials: [SimpleMaterial(color: UIColor(red: 0.46, green: 0.32, blue: 0.18, alpha: 1),
+                                                              roughness: 0.9, isMetallic: false)])
+            rod.position = SIMD3(0, -0.26, 0)
+            return rod
+
+        case "item.reinforced_stick":
+            let root = Entity()
+            let rod = ModelEntity(mesh: .generateCylinder(height: 0.52, radius: 0.022),
+                                  materials: [SimpleMaterial(color: UIColor(red: 0.40, green: 0.28, blue: 0.16, alpha: 1),
+                                                              roughness: 0.9, isMetallic: false)])
+            rod.position = SIMD3(0, -0.27, 0)
+            root.addChild(rod)
+            let wrap = ModelEntity(mesh: .generateCylinder(height: 0.05, radius: 0.026),
+                                   materials: [SimpleMaterial(color: UIColor(white: 0.08, alpha: 1),
+                                                               roughness: 0.6, isMetallic: false)])
+            wrap.position = SIMD3(0, -0.46, 0)
+            root.addChild(wrap)
+            return root
+
+        case "item.pistol":
+            // Simple L-shape: slide+barrel forward of the fist, handle dropping below it.
+            let root = Entity()
+            let metal = SimpleMaterial(color: UIColor(white: 0.12, alpha: 1), roughness: 0.35, isMetallic: true)
+            let grip  = SimpleMaterial(color: UIColor(white: 0.08, alpha: 1), roughness: 0.7, isMetallic: false)
+            let slide = ModelEntity(mesh: .generateBox(size: SIMD3(0.026, 0.04, 0.13), cornerRadius: 0.004),
+                                    materials: [metal])
+            slide.position = SIMD3(0, 0.0, -0.05)
+            root.addChild(slide)
+            let handle = ModelEntity(mesh: .generateBox(size: SIMD3(0.025, 0.075, 0.035), cornerRadius: 0.004),
+                                     materials: [grip])
+            handle.position = SIMD3(0, -0.05, 0)
+            root.addChild(handle)
+            return root
+
+        default:
+            return nil
+        }
     }
 
     private func applyMask(itemId: String?) {

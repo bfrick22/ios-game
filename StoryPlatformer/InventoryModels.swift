@@ -129,10 +129,10 @@ enum ItemCatalog {
             displayName: "Knife",
             category: .weapon,
             maxStack: 1,
-            systemImageName: "scissors",
+            systemImageName: "fork.knife",          // reliable SF Symbol that reads as a knife
             healFraction: nil,
             missionUseMessage: nil,
-            meleeDamage: 0.24
+            meleeDamage: 0.55                       // deep wound — close to a 2-hit kill
         ),
         "item.scrap_wire": ItemDefinition(
             id: "item.scrap_wire",
@@ -169,10 +169,10 @@ enum ItemCatalog {
             displayName: "Baton",
             category: .weapon,
             maxStack: 1,
-            systemImageName: "baseball.diamond.bases",
+            systemImageName: "hammer.fill",         // reliable SF Symbol — reads as blunt instrument
             healFraction: nil,
             missionUseMessage: nil,
-            meleeDamage: 0.28
+            meleeDamage: 0.22                       // blunt force — several hits to drop a target
         ),
         // Gun: grounded post-EMP firearm. Ranged via hitscan; finite magazine, no
         // reload yet (running dry is the limit). Pistol-whip damage is the melee fallback.
