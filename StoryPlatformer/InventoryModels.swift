@@ -40,8 +40,10 @@ struct ItemDefinition: Sendable, Hashable, Equatable {
     var meleeDamage: Float?
     /// Weapon (ranged): damage per shot (normalized 0…1 vs enemy).
     var rangedDamage: Float? = nil
-    /// Weapon (ranged): rounds available before going dry (no reload system yet).
+    /// Weapon (ranged): rounds available before going dry.
     var magazineCapacity: Int? = nil
+    /// Supply: itemId of the weapon this consumable reloads on Use. nil for non-reloads.
+    var reloadsWeapon: String? = nil
     /// Apparel: which rig slot this equips to.
     var gearSlot: GearSlot? = nil
     /// Apparel: color applied to the slot's parts (or the mask mesh).
@@ -174,8 +176,19 @@ enum ItemCatalog {
             missionUseMessage: nil,
             meleeDamage: 0.22                       // blunt force — several hits to drop a target
         ),
-        // Gun: grounded post-EMP firearm. Ranged via hitscan; finite magazine, no
-        // reload yet (running dry is the limit). Pistol-whip damage is the melee fallback.
+        "item.pistol_magazine": ItemDefinition(
+            id: "item.pistol_magazine",
+            displayName: "Pistol magazine",
+            category: .supply,
+            maxStack: 4,
+            systemImageName: "rectangle.stack.fill",
+            healFraction: nil,
+            missionUseMessage: nil,
+            meleeDamage: nil,
+            reloadsWeapon: "item.pistol"
+        ),
+        // Gun: grounded post-EMP firearm. Ranged via hitscan; finite magazine,
+        // refilled by consuming a `item.pistol_magazine`. Pistol-whip damage is the melee fallback.
         "item.pistol": ItemDefinition(
             id: "item.pistol",
             displayName: "Pistol",

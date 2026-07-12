@@ -214,10 +214,10 @@ final class ThirdPersonSceneController {
     ) {
         if !sceneGraphBuilt {
             buildGround(forChapterId: chapter.id)
-            if chapter.id == "chapter.tutorial" {
-                buildTutorialEnvironment()
-            } else {
-                buildFactoryEnvironment()
+            switch chapter.id {
+            case "chapter.tutorial": buildTutorialEnvironment()
+            case "chapter.city":     buildCityEnvironment()
+            default:                 buildFactoryEnvironment()
             }
             buildHazardMeshPlaceholder()
             buildCompletionMarkerPlaceholder()
@@ -406,13 +406,23 @@ final class ThirdPersonSceneController {
         // Ground top sits at Y=0 (where the player rests). The visible surface IS this
         // collision floor — no raised decorative mat — so feet never sink/float.
         let size = SIMD3<Float>(32, 0.25, 56)
-        let isGym = chapterId == "chapter.tutorial"
-        let color = isGym
-            ? UIColor(red: 0.66, green: 0.48, blue: 0.28, alpha: 1)   // gym hardwood
-            : UIColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1)   // dark factory floor
+        let color: UIColor
+        let roughness: Float
+        let metallic: Bool
+        switch chapterId {
+        case "chapter.tutorial":
+            color = UIColor(red: 0.66, green: 0.48, blue: 0.28, alpha: 1)   // gym hardwood
+            roughness = 0.8; metallic = false
+        case "chapter.city":
+            color = UIColor(red: 0.13, green: 0.13, blue: 0.14, alpha: 1)   // asphalt
+            roughness = 0.9; metallic = false
+        default:
+            color = UIColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1)   // dark factory floor
+            roughness = 0.4; metallic = true
+        }
         ground.model = ModelComponent(
             mesh: .generateBox(size: size),
-            materials: [SimpleMaterial(color: color, roughness: isGym ? 0.8 : 0.4, isMetallic: !isGym)]
+            materials: [SimpleMaterial(color: color, roughness: MaterialScalarParameter(floatLiteral: roughness), isMetallic: metallic)]
         )
         ground.position = SIMD3<Float>(0, -0.125, -27)
         ground.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
@@ -801,6 +811,140 @@ final class ThirdPersonSceneController {
         deco("Exit.frameL",   SIMD3(0.25, 3.2, 0.25), -2.0, 1.6, -49.7, metal)
         deco("Exit.frameR",   SIMD3(0.25, 3.2, 0.25),  2.0, 1.6, -49.7, metal)
         deco("Exit.sign",     SIMD3(1.7, 0.45, 0.12), 0, 3.55, -49.62, green)
+    }
+
+    // MARK: City level — Broken Street
+    //
+    // Urban-survival corridor: sidewalks frame an asphalt road, abandoned cars + a
+    // truck blockade force routing, a gas-leak strip (chapter hazardVolume) you jump
+    // over, a downed officer (story beat), and a gated bridge exit.
+    private func buildCityEnvironment() {
+        environmentRoot.name = "BrokenStreet"
+
+        let concrete   = UIColor(red: 0.55, green: 0.54, blue: 0.50, alpha: 1)
+        let curb       = UIColor(red: 0.35, green: 0.34, blue: 0.32, alpha: 1)
+        let buildingA  = UIColor(red: 0.32, green: 0.28, blue: 0.24, alpha: 1)   // brick
+        let buildingB  = UIColor(red: 0.42, green: 0.40, blue: 0.36, alpha: 1)   // stone
+        let window     = UIColor(red: 0.10, green: 0.12, blue: 0.18, alpha: 1)
+        let carRed     = UIColor(red: 0.42, green: 0.13, blue: 0.13, alpha: 1)
+        let carBlue    = UIColor(red: 0.15, green: 0.26, blue: 0.42, alpha: 1)
+        let carBlack   = UIColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 1)
+        let truckCol   = UIColor(red: 0.34, green: 0.36, blue: 0.30, alpha: 1)
+        let metal      = UIColor(red: 0.55, green: 0.57, blue: 0.60, alpha: 1)
+        let lineYellow = UIColor(red: 0.93, green: 0.78, blue: 0.18, alpha: 1)
+        let lineWhite  = UIColor(red: 0.88, green: 0.88, blue: 0.83, alpha: 1)
+        let cop        = UIColor(red: 0.16, green: 0.22, blue: 0.40, alpha: 1)
+        let green      = UIColor(red: 0.10, green: 0.72, blue: 0.32, alpha: 1)
+
+        func solid(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ z: Float,
+                   _ color: UIColor, metallic: Bool = false) {
+            let ent = ModelEntity()
+            ent.name = name
+            ent.model = ModelComponent(
+                mesh: .generateBox(size: size, cornerRadius: 0.04),
+                materials: [SimpleMaterial(color: color, roughness: 0.85, isMetallic: metallic)]
+            )
+            ent.position = SIMD3(x, size.y * 0.5, z)
+            ent.components.set(CollisionComponent(shapes: [.generateBox(size: size)]))
+            ent.components.set(PhysicsBodyComponent(massProperties: .default,
+                                                    material: playerGroundMaterial, mode: .static))
+            environmentRoot.addChild(ent)
+        }
+        func deco(_ name: String, _ size: SIMD3<Float>, _ x: Float, _ y: Float, _ z: Float,
+                  _ color: UIColor, metallic: Bool = false) {
+            let ent = ModelEntity()
+            ent.name = name
+            ent.model = ModelComponent(
+                mesh: .generateBox(size: size),
+                materials: [SimpleMaterial(color: color, roughness: 0.9, isMetallic: metallic)]
+            )
+            ent.position = SIMD3(x, y, z)
+            environmentRoot.addChild(ent)
+        }
+
+        // ── Sidewalks (raised concrete strips, full length of the street) ──────
+        deco("Sidewalk.L", SIMD3(2.5, 0.15, 50), -7.5, 0.075, -25, concrete)
+        deco("Sidewalk.R", SIMD3(2.5, 0.15, 50),  7.5, 0.075, -25, concrete)
+        deco("Curb.L",     SIMD3(0.10, 0.18, 50), -6.20, 0.09, -25, curb)
+        deco("Curb.R",     SIMD3(0.10, 0.18, 50),  6.20, 0.09, -25, curb)
+
+        // ── Lane markings (dashed yellow centerline + side white) ──────────────
+        for (i, z) in stride(from: Float(-2), through: Float(-46), by: -4).enumerated() {
+            deco("Lane.M.\(i)", SIMD3(0.18, 0.02, 1.6), 0,    0.012, z, lineYellow)
+        }
+        deco("Lane.WL", SIMD3(0.12, 0.02, 46), -3.0, 0.012, -24, lineWhite)
+        deco("Lane.WR", SIMD3(0.12, 0.02, 46),  3.0, 0.012, -24, lineWhite)
+
+        // ── Buildings: two long facades flanking the street, with window strips ─
+        solid("Bldg.L", SIMD3(0.8, 6, 52), -9.4, -25, buildingA)
+        solid("Bldg.R", SIMD3(0.8, 6, 52),  9.4, -25, buildingB)
+        // window rows
+        for (i, z) in stride(from: Float(-3), through: Float(-49), by: -4).enumerated() {
+            deco("WinL.1.\(i)", SIMD3(0.05, 0.55, 0.9), -9.00, 1.6, z, window)
+            deco("WinL.2.\(i)", SIMD3(0.05, 0.55, 0.9), -9.00, 3.2, z, window)
+            deco("WinL.3.\(i)", SIMD3(0.05, 0.55, 0.9), -9.00, 4.8, z, window)
+            deco("WinR.1.\(i)", SIMD3(0.05, 0.55, 0.9),  9.00, 1.6, z, window)
+            deco("WinR.2.\(i)", SIMD3(0.05, 0.55, 0.9),  9.00, 3.2, z, window)
+            deco("WinR.3.\(i)", SIMD3(0.05, 0.55, 0.9),  9.00, 4.8, z, window)
+        }
+
+        // ── Abandoned cars (collidable blocks scattered along the road) ────────
+        func car(_ name: String, _ x: Float, _ z: Float, _ color: UIColor, yaw: Float = 0) {
+            // Body
+            let body = ModelEntity()
+            body.name = "\(name).body"
+            body.model = ModelComponent(mesh: .generateBox(size: SIMD3(1.85, 1.05, 4.2), cornerRadius: 0.15),
+                                        materials: [SimpleMaterial(color: color, roughness: 0.6, isMetallic: false)])
+            body.position = SIMD3(x, 0.525, z)
+            body.transform.rotation = simd_quatf(angle: yaw, axis: SIMD3(0, 1, 0))
+            body.components.set(CollisionComponent(shapes: [.generateBox(size: SIMD3(1.85, 1.05, 4.2))]))
+            body.components.set(PhysicsBodyComponent(massProperties: .default, material: playerGroundMaterial, mode: .static))
+            environmentRoot.addChild(body)
+            // Cab/roof (smaller box on top)
+            let cab = ModelEntity(mesh: .generateBox(size: SIMD3(1.65, 0.55, 2.0), cornerRadius: 0.12),
+                                   materials: [SimpleMaterial(color: color, roughness: 0.6, isMetallic: false)])
+            cab.position = SIMD3(0, 0.78, 0)
+            body.addChild(cab)
+            // Windshield (dark)
+            let glass = ModelEntity(mesh: .generateBox(size: SIMD3(1.50, 0.45, 1.6), cornerRadius: 0.05),
+                                     materials: [SimpleMaterial(color: window, roughness: 0.3, isMetallic: true)])
+            glass.position = SIMD3(0, 0.80, 0)
+            body.addChild(glass)
+        }
+        car("Car.A", -3.5, -10, carRed)
+        car("Car.B",  3.0,  -16, carBlue, yaw: .pi)
+        car("Car.C", -3.0, -32, carBlack, yaw: 0.3)
+        car("Car.D",  3.5, -42, carRed,  yaw: -0.2)
+
+        // ── Wrecked truck blockade (chokepoint at z ≈ -20, gap toward the left) ─
+        solid("Truck.Cab", SIMD3(2.4, 2.4, 3.2), 2.5, -20, truckCol, metallic: true)
+        solid("Truck.Box", SIMD3(2.5, 2.6, 5.6), 2.5, -16, truckCol, metallic: true)
+        deco("Truck.GlassL", SIMD3(0.05, 0.7, 1.1),  1.30, 1.7, -20.4, window, metallic: true)
+        deco("Truck.GlassR", SIMD3(0.05, 0.7, 1.1),  3.70, 1.7, -20.4, window, metallic: true)
+        // Debris pile beside the truck — forces routing
+        solid("Debris.A", SIMD3(1.2, 0.7, 1.2), 4.6, -19, curb)
+        solid("Debris.B", SIMD3(0.8, 0.5, 0.8), 5.0, -18, curb)
+
+        // ── Gas-leak warning posts (visual; hazard is on the floor via chapter cfg) ─
+        deco("GasPost.L", SIMD3(0.16, 1.2, 0.16), -3.5, 0.6, -24.5, lineYellow)
+        deco("GasPost.R", SIMD3(0.16, 1.2, 0.16),  3.5, 0.6, -24.5, lineYellow)
+        deco("GasBar",    SIMD3(7.0, 0.08, 0.08), 0, 1.10, -24.5, lineYellow)
+        deco("GasMark.L", SIMD3(2.6, 0.02, 0.4), 0, 0.014, -22.8, lineYellow)
+        deco("GasMark.R", SIMD3(2.6, 0.02, 0.4), 0, 0.014, -26.2, lineYellow)
+
+        // ── Downed officer (story-beat target — interactProp positioned by config) ─
+        // Body silhouette on the sidewalk so the interact target is recognizable.
+        deco("Cop.Torso", SIMD3(0.5, 0.3, 1.0), -5.2, 0.15, -36, cop)
+        deco("Cop.Legs",  SIMD3(0.45, 0.25, 0.9), -5.2, 0.125, -37.0, cop)
+        deco("Cop.Head",  SIMD3(0.28, 0.28, 0.32), -5.2, 0.30, -35.3, UIColor(red: 0.84, green: 0.66, blue: 0.52, alpha: 1))
+        deco("Cop.Badge", SIMD3(0.18, 0.02, 0.18), -5.0, 0.31, -36, lineYellow)
+
+        // ── Exit: a chain-link gated bridge entry (green = goal) ───────────────
+        solid("Gate.PostL", SIMD3(0.4, 4.0, 0.4), -3.2, -49.5, metal, metallic: true)
+        solid("Gate.PostR", SIMD3(0.4, 4.0, 0.4),  3.2, -49.5, metal, metallic: true)
+        deco("Gate.Top",   SIMD3(6.6, 0.3, 0.3),  0, 3.85, -49.5, metal, metallic: true)
+        deco("Gate.Mesh",  SIMD3(6.2, 3.0, 0.05), 0, 1.6,  -49.55, UIColor(white: 0.18, alpha: 1))
+        deco("Exit.sign",  SIMD3(2.0, 0.5, 0.12), 0, 4.30, -49.42, green)
     }
 
     private func buildHazardMeshPlaceholder() {

@@ -72,6 +72,42 @@ final class GameSessionViewModel {
         return true
     }
 
+    /// True iff the player has a ranged weapon equipped, a matching reload item
+    /// in inventory, and the magazine isn't already full. Drives the Reload button.
+    var canReloadEquippedRangedWeapon: Bool {
+        guard let w = equippedRangedWeaponId,
+              let def = ItemCatalog.definition(for: w),
+              let cap = def.magazineCapacity,
+              ammo(for: w) < cap else { return false }
+        return inventorySlots.contains { stack in
+            guard let s = stack,
+                  let sdef = ItemCatalog.definition(for: s.itemId) else { return false }
+            return sdef.reloadsWeapon == w && s.quantity > 0
+        }
+    }
+
+    /// Consume one matching reload item and top up the equipped ranged weapon.
+    /// Returns true on success.
+    @discardableResult
+    func reloadEquippedRangedWeapon() -> Bool {
+        guard let w = equippedRangedWeaponId,
+              let wdef = ItemCatalog.definition(for: w),
+              let cap = wdef.magazineCapacity,
+              ammo(for: w) < cap else { return false }
+        for i in inventorySlots.indices {
+            guard var s = inventorySlots[i],
+                  let mdef = ItemCatalog.definition(for: s.itemId),
+                  mdef.reloadsWeapon == w, s.quantity > 0 else { continue }
+            s.quantity -= 1
+            inventorySlots[i] = s.quantity > 0 ? s : nil
+            ammoByItem[w] = cap
+            flashInteractMessage("Reloaded \(wdef.displayName).")
+            AudioEngine.shared.play(.reload)
+            return true
+        }
+        return false
+    }
+
     var equippedToolSummary: String? {
         guard let id = equippedToolItemId, let def = ItemCatalog.definition(for: id), def.category == .tool else { return nil }
         return def.displayName
@@ -335,6 +371,26 @@ final class GameSessionViewModel {
             flashInteractMessage("Used \(def.displayName).")
 
         case .supply:
+            // Reload-on-Use: a supply item with `reloadsWeapon` set tops up the named
+            // ranged weapon. Only consumes the magazine if the gun isn't already full
+            // and that gun is currently equipped (avoids wasting mags on holstered guns).
+            if let reloadTarget = def.reloadsWeapon {
+                guard equippedWeaponItemId == reloadTarget else {
+                    flashInteractMessage("Equip the \(ItemCatalog.definition(for: reloadTarget)?.displayName ?? "weapon") first.")
+                    return
+                }
+                guard let wdef = ItemCatalog.definition(for: reloadTarget),
+                      let cap = wdef.magazineCapacity, ammo(for: reloadTarget) < cap else {
+                    flashInteractMessage("Magazine already full.")
+                    return
+                }
+                stack.quantity -= 1
+                inventorySlots[idx] = stack.quantity > 0 ? stack : nil
+                ammoByItem[reloadTarget] = cap
+                flashInteractMessage("Reloaded \(wdef.displayName).")
+                AudioEngine.shared.play(.reload)
+                return
+            }
             let delta = def.healFraction ?? 0
             if delta > 0 {
                 healthNormalized = min(1, healthNormalized + delta)

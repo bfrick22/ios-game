@@ -2,16 +2,41 @@ import SwiftUI
 
 struct ChapterSelectView: View {
     @Bindable var progress: ChapterProgressViewModel
-    @State private var path = NavigationPath()
+
+    /// Conditional rendering instead of NavigationStack/path mutation. Swapping
+    /// chapters via this @State + `.id(chapter.id)` guarantees a clean re-init of
+    /// GameRootView (and its scene controller) on each chapter transition.
+    @State private var currentChapter: ChapterConfig?
+
+    /// Hoisted so inventory, equipped gear, and remembered dialog choices
+    /// persist when the player advances from one chapter to the next.
+    @State private var sessionViewModel = GameSessionViewModel()
 
     var body: some View {
-        NavigationStack(path: $path) {
+        Group {
+            if let chapter = currentChapter {
+                GameRootView(
+                    chapter: chapter,
+                    progress: progress,
+                    viewModel: sessionViewModel,
+                    onAdvance: { next in currentChapter = next },
+                    onBack:    { currentChapter = nil }
+                )
+                .id(chapter.id)   // force a fresh GameRootView when the chapter changes
+            } else {
+                chapterList
+            }
+        }
+    }
+
+    private var chapterList: some View {
+        NavigationStack {
             List {
                 Section {
                     ForEach(ChapterRegistry.chapters) { chapter in
                         Button {
                             if progress.isUnlocked(chapter) {
-                                path.append(chapter)
+                                currentChapter = chapter
                             }
                         } label: {
                             HStack {
@@ -43,9 +68,6 @@ struct ChapterSelectView: View {
                 }
             }
             .navigationTitle("Story Platformer")
-            .navigationDestination(for: ChapterConfig.self) { chapter in
-                GameRootView(chapter: chapter, progress: progress)
-            }
         }
     }
 }

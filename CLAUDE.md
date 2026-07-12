@@ -5,6 +5,7 @@
 - **Language:** Swift 6.x
 - **UI / menus / HUD:** SwiftUI
 - **Game scenes:** RealityKit (3D)
+- **Audio:** AVFoundation (procedural via `AVAudioEngine` — no asset files yet)
 - **Async state:** Swift Concurrency (`async`/`await`)
 - **Architecture:** MVVM for UI; physics-driven entities for gameplay
 
@@ -41,8 +42,8 @@
 
 - **3rd-person only:** behind-the-shoulder camera (Uncharted / Alan Wake style).
 - **Not allowed:** top-down, isometric, first-person, side-scroller, or free-roam open world.
-- **Camera:** player-controlled orbit. The **right-side look pad (second thumb)** drives camera yaw/pitch; the rig **gently auto-recenters behind the player's heading only while running and not actively looking**. Pitched down from horizontal. (Not a tight auto-follow — that created a movement/camera feedback loop and is intentionally avoided.)
-- **Movement:** left stick drives the player in **camera-relative XZ** (the stick's frame comes from the camera yaw, `groundForward`/`groundRight`); the character **eases to face its travel direction**. This is the standard 3rd-person controller (camera-relative move + orbit camera) — it keeps the body facing where it moves, so the player never moonwalks/appears to walk backwards.
+- **Camera:** player-controlled orbit. The **right-side look pad (second thumb)** is the only thing that turns the camera (yaw + pitch). Pitched down from horizontal. **No auto-follow / auto-recenter** — the camera stays where the player puts it. (Auto-follow was tried and caused a feedback loop / moonwalking; intentionally removed.)
+- **Movement (camera-aligned):** left stick drives the player in **camera-relative XZ** (frame from the camera yaw, `groundForward`/`groundRight`); the body **aligns to the camera's forward** — stick input *never* rotates the body. Only the look pad turns the body. Up = walk forward into the screen, down = backpedal (body keeps facing forward, no spin), left/right = strafe. This is the camera-aligned variant of 3rd-person controls; it reliably eliminates the moonwalk/spin failure modes of a "face the travel direction" model.
 
 ### 4 — Visual style
 
@@ -57,7 +58,8 @@
 
 ### 6 — Inventory
 
-- Small fixed-slot inventory (8–10 slots). Categories: tool, weapon, medical, supply, mission.
+- Small fixed-slot inventory (10 slots). Categories: tool, weapon, medical, supply, mission, **apparel**.
+- Inventory + equipped items **persist across chapters**; per-chapter state (story beats, dialog, prompts) resets on chapter entry.
 - **No** weight simulation, complex sorting, or deep management UI.
 
 ### 7 — Crafting
@@ -67,8 +69,10 @@
 
 ### 8 — Combat
 
-- Grounded melee + improvised weapons + traps. Physical, fast, tactical.
-- **No** magic, superpowers, or sci-fi weapons. Post-EMP, grounded toolkit only.
+- **Melee:** grounded combo (jab → cross → kick), improvised weapons (knife, baton, stick, reinforced stick). Held weapon is visible in the right hand. Strikes give feedback (white flash on hit, spark burst, haptics, camera kick, audio thud).
+- **Ranged:** grounded firearms (e.g. pistol). Hitscan from the camera's forward; **damage is constant across the full range — no falloff** (real-firearm round). Finite magazine; **no reload system yet** — running dry is the limit. Aim reticle shows when a ranged weapon is equipped; HUD shows ammo count.
+- **Traps:** tripwire, etc. Designer-placed, story-gated.
+- **No** magic, superpowers, sci-fi weapons. Post-EMP, grounded toolkit only.
 
 ### 9 — Multiplayer
 
@@ -104,6 +108,21 @@
 
 - Modern United States, post-EMP collapse. Civilian survival, urban-to-safe-zone journey.
 - Serious, grounded, hopeful.
+
+---
+
+## System notes — what's actually built
+
+Beyond the core rules above, these systems are implemented and any new work should compose with them (not reinvent or contradict).
+
+- **Audio (`AudioEngine` in `GameRootView.swift`)** — procedural via `AVAudioEngine`; no asset files needed. Cues: `strikeHit`, `strikeWhiff`, `jump`, `land`, `hazard`, `dialogOpen`, `dialogClose`, `pickup`, `equip`, `gunshot`, `dryFire`. Drop in real `.wav`s later by swapping the recipe functions for buffer loaders.
+- **Strike feedback** — every connected strike triggers a spark burst, white target flash, haptic, camera shake, and audio thud. Training-gym dummies are non-damage strikable targets that swing on a damped spring; enemies take damage + flash.
+- **Gear / armor** — apparel (shirt/pants/gloves/mask) equipped via the Bag's **Use** action; recolors the rig parts (`shirtParts` / `pantsParts` / `handParts`) or mounts a mask mesh on `HeadGearMount`. Each piece grants damage resistance that stacks (capped at 80%); HUD shows armor %.
+- **Held-weapon visuals** — equipped weapon (knife / baton / stick / pistol / etc.) is shown as a procedural mesh in the player's right hand. Swap is diffed via `applyHeldWeaponIfChanged`.
+- **NPCs / dialog** — data-driven via `NPCConfig`. Friendly NPCs always have dialog and **cannot be attacked**; enemy NPCs may have dialog where a `turnsHostile` choice converts them into a patrolling combat enemy (re-using the NPC's figure). Choices recorded into `npcChoices`. **Telltale-style consequence layer is planned** (recorded → propagated to later content); not yet wired — design it before retro-fitting many NPCs.
+- **Interactable indicators** — floating color-coded orbs above NPCs and pickups (green friendly, amber dialog-enemy, gold supply). Pulse at idle, scale up when the player is within interact reach. Interact button icon also pulses via `.symbolEffect(.pulse)` when actionable. Supply orb auto-hides once the cache has been looted.
+- **Chapter progression** — `ChapterSelectView` uses conditional rendering on a `currentChapter` state with `.id(chapter.id)` to re-create `GameRootView` cleanly per chapter. Reaching the completion volume shows a **Chapter Complete** overlay with **Continue → [Next Chapter]** and **Back to Chapters**. Do NOT use `NavigationStack` path mutation for game→game transitions — it was tried and failed silently.
+- **Save / persistence** — chapter-level only: `ChapterProgressViewModel` tracks `highestUnlockedChapterIndex`, persisted via `GameProgressStore`. Mid-chapter checkpoints (respawn on death, save anywhere) are NOT implemented.
 
 ---
 

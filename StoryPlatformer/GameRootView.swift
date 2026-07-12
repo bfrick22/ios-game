@@ -6,12 +6,19 @@ import SwiftUI
 struct GameRootView: View {
     let chapter: ChapterConfig
     var progress: ChapterProgressViewModel
+    @Bindable var viewModel: GameSessionViewModel
+    /// Called when the player taps "Continue" on the chapter-complete overlay.
+    /// The owner (chapter-select) mutates its own NavigationPath in response —
+    /// more reliable than threading a Binding through navigationDestination.
+    let onAdvance: (ChapterConfig) -> Void
+    /// Called when the player taps "Back to Chapters."
+    let onBack: () -> Void
 
-    @State private var viewModel = GameSessionViewModel()
     @State private var sceneController = ThirdPersonSceneController()
     @State private var frameClock = FrameClock()
     @State private var showChapterIntro = true
     @State private var inventoryExpanded = false
+    @State private var showCompletionOverlay = false
 
     var body: some View {
         GeometryReader { geo in
@@ -46,6 +53,10 @@ struct GameRootView: View {
 
                 if showChapterIntro {
                     chapterIntroOverlay
+                }
+
+                if showCompletionOverlay {
+                    chapterCompleteOverlay
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -85,7 +96,7 @@ struct GameRootView: View {
         .onChange(of: viewModel.chapterCompletionToken) { _, _ in
             guard viewModel.chapterCompletionToken > 0 else { return }
             progress.registerCompletion(of: chapter)
-            viewModel.flashInteractMessage("Chapter complete — progress saved.")
+            showCompletionOverlay = true
         }
         .onDisappear {
             frameClock.stop()
@@ -200,6 +211,57 @@ struct GameRootView: View {
         }
     }
 
+    private var chapterCompleteOverlay: some View {
+        let next = ChapterRegistry.next(after: chapter)
+        return VStack(spacing: 18) {
+            Text("Chapter Complete")
+                .font(.title2.weight(.bold))
+            Text(chapter.title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 10) {
+                if let next {
+                    Button {
+                        advance(to: next)
+                    } label: {
+                        Text("Continue → \(next.title)")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Text("End of the story so far.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    backToChapters()
+                } label: {
+                    Text("Back to Chapters")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: 380)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.45))
+        .transition(.opacity)
+    }
+
+    private func advance(to next: ChapterConfig) {
+        showCompletionOverlay = false
+        onAdvance(next)
+    }
+
+    private func backToChapters() {
+        showCompletionOverlay = false
+        onBack()
+    }
+
     private var chapterIntroOverlay: some View {
         VStack(spacing: 16) {
             Text(chapter.title)
@@ -298,7 +360,7 @@ final class FrameClock: NSObject {
 /// One-shot sound cues. Sounds are synthesized procedurally (no asset files), so
 /// new cues just need a recipe in `AudioEngine.buildBuffer`.
 enum SoundCue {
-    case strikeHit, strikeWhiff, jump, land, hazard, dialogOpen, dialogClose, pickup, equip, gunshot, dryFire
+    case strikeHit, strikeWhiff, jump, land, hazard, dialogOpen, dialogClose, pickup, equip, gunshot, dryFire, reload
 }
 
 /// Lightweight procedural-audio engine. Pre-builds PCM buffers for each cue at
@@ -414,6 +476,21 @@ final class AudioEngine {
         buffers[.dryFire]     = buildBuffer(duration: 0.08) { t, _ in
             return Float.random(in: -1 ... 1) * expf(-45 * t) * 0.35
         }
+        // Reload: a chunky two-part click — drop-mag thunk, brief pause, slide-rack click.
+        buffers[.reload]      = buildBuffer(duration: 0.36) { t, _ in
+            if t < 0.07 {
+                // Mag drop thunk: low sine + noise
+                return sinf(2 * .pi * 110 * t) * expf(-22 * t) * 0.40
+                     + Float.random(in: -1 ... 1) * expf(-40 * t) * 0.25
+            } else if t < 0.20 {
+                return 0     // brief silence between thunk and rack
+            } else {
+                let t2 = t - 0.20
+                // Slide-rack click: sharp noise transient + mid sine
+                return Float.random(in: -1 ... 1) * expf(-55 * t2) * 0.45
+                     + sinf(2 * .pi * 800 * t2) * expf(-30 * t2) * 0.18
+            }
+        }
     }
 
     private func buildBuffer(duration: Double, fill: (Float, Int) -> Float) -> AVAudioPCMBuffer? {
@@ -440,6 +517,8 @@ private enum IntroCopy {
             return "The factory grid is still running. Blue neon marks the safe path — red is drone territory. Reach the server room before they lock you out."
         case "narrative.ch2.intro":
             return "The drones are adapting their patrol routes. Find the workbench, craft what you need, and reach the arterial exit."
+        case "narrative.ch3.intro":
+            return "Power's out across the grid. The street is broken, gas is leaking, and survivors are turning on each other. Cross the city — your way out is past the bridge."
         default:
             return ""
         }
@@ -448,6 +527,12 @@ private enum IntroCopy {
 
 #Preview {
     NavigationStack {
-        GameRootView(chapter: ChapterRegistry.chapters[0], progress: ChapterProgressViewModel())
+        GameRootView(
+            chapter: ChapterRegistry.chapters[0],
+            progress: ChapterProgressViewModel(),
+            viewModel: GameSessionViewModel(),
+            onAdvance: { _ in },
+            onBack:    {}
+        )
     }
 }

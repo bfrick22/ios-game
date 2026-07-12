@@ -168,6 +168,8 @@ enum ChapterRegistry {
                     "item.knife",
                     "item.baton",
                     "item.pistol",
+                    "item.pistol_magazine",
+                    "item.pistol_magazine",
                     "item.work_shirt",
                     "item.cargo_pants",
                     "item.work_gloves",
@@ -324,9 +326,57 @@ enum ChapterRegistry {
                 )
             )
         ),
+        // ── Chapter 3 — The City ──────────────────────────────────────────────
+        // First urban-survival chapter: broken street, abandoned cars, gas leak,
+        // a wrecked truck blockade, a downed officer's radio, scavenger patrol.
+        ChapterConfig(
+            id: "chapter.city",
+            orderIndex: 3,
+            title: "The City",
+            objectiveId: "cross_broken_street",
+            narrativeIntroTextId: "narrative.ch3.intro",
+            completionTriggerId: "trigger.city_exit",
+            playerSpawn: Vector3Config(x: 0, y: 0.55, z: 0),
+            completionVolume: AxisAlignedVolumeConfig(
+                min: Vector3Config(x: -5, y: 0, z: -50),
+                max: Vector3Config(x:  5, y: 5, z: -46)
+            ),
+            objectiveHUDLine: "Cross the broken street and find a way out",
+            hazardVolume: AxisAlignedVolumeConfig(
+                min: Vector3Config(x: -3.5, y: 0, z: -25.2),   // gas leak across the road
+                max: Vector3Config(x:  3.5, y: 1.0, z: -23.8)
+            ),
+            storyBeat: ChapterStoryBeatConfig(
+                storyBeatId: "beat.ch3.officer_radio",
+                worldPosition: Vector3Config(x: -5.0, y: 0.5, z: -36),
+                interactPrompt: "Take the officer's radio",
+                interactMessage: "Radio's still warm. Safe-zone signal says: past the bridge — keep moving.",
+                grantsItemId: nil,
+                grantsItemIds: ["item.medkit", "item.energy_bar"]
+            ),
+            craftingWorkstations: nil,
+            combatEnemies: [
+                CombatEnemyConfig(
+                    id: "hostile.city_scavenger",
+                    worldPosition: Vector3Config(x: 3, y: 0.55, z: -32),
+                    patrolHalfWidth: 3.0,
+                    moveSpeed: 1.25,
+                    maxHealth: 1.0
+                ),
+            ],
+            tripwire: nil,
+            npcs: nil
+        ),
     ]
 
     static func chapter(id: String) -> ChapterConfig? {
         chapters.first { $0.id == id }
+    }
+
+    /// The chapter immediately after `chapter` in `orderIndex` sequence, or nil at the end.
+    static func next(after chapter: ChapterConfig) -> ChapterConfig? {
+        chapters
+            .filter { $0.orderIndex > chapter.orderIndex }
+            .min(by: { $0.orderIndex < $1.orderIndex })
     }
 }

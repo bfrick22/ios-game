@@ -35,6 +35,9 @@ struct TraversalTouchOverlay: View {
 
                         VStack(spacing: 14) {
                             interactButton
+                            if viewModel.canReloadEquippedRangedWeapon {
+                                reloadButton
+                            }
                             attackButton
                             jumpButton
                         }
@@ -140,6 +143,23 @@ struct TraversalTouchOverlay: View {
         .accessibilityHint(viewModel.equippedRangedWeaponId != nil
             ? "Fires the equipped ranged weapon."
             : "Grounded strike with equipped weapon or fists.")
+    }
+
+    private var reloadButton: some View {
+        Button {
+            viewModel.reloadEquippedRangedWeapon()
+        } label: {
+            Label("Reload", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 4)
+                .frame(width: 72, height: 56)
+                .background(Color.yellow.opacity(0.35), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reload weapon")
     }
 
     private var attackLabelText: String {

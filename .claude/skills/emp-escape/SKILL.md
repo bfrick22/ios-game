@@ -52,8 +52,8 @@ Then stop and wait. If the user says override / "do it anyway" / equivalent, bui
 ## Core identity (the non-negotiables of the *vision*)
 
 - **Genre:** story-driven survival experience
-- **Perspective:** **3rd-person, behind-the-shoulder.** Player-controlled orbit camera: a **right-side look pad (second thumb)** drives camera yaw/pitch; the rig gently auto-recenters behind the heading only while running and not looking. Pitched down from horizontal. No top-down, isometric, first-person, or side-scroller. (Not a tight auto-follow — that caused a movement/camera feedback loop and is avoided.)
-- **Movement:** left stick drives the player in **camera-relative XZ** (frame from the camera yaw); the character eases to face its travel direction. Standard 3rd-person controller (camera-relative move + orbit camera) so the body always faces where it moves. Open 3D space the player can navigate *around* obstacles — not corridor-locked, not open-world.
+- **Perspective:** **3rd-person, behind-the-shoulder.** Player-controlled orbit camera: a **right-side look pad (second thumb)** is the only thing that turns the camera (yaw + pitch). Pitched down from horizontal. **No auto-follow / auto-recenter** — the camera stays where the player put it. (Auto-follow was tried and caused moonwalking; intentionally removed.)
+- **Movement (camera-aligned):** left stick drives the player in **camera-relative XZ**; the body **aligns to the camera's forward** — stick input *never* rotates the body, only the look pad does. Up = walk forward, down = backpedal (no spin), left/right = strafe. Open 3D space (not corridor, not open-world).
 - **Setting:** modern United States, post-EMP collapse, civilian survival, urban → suburban → safe zone progression
 - **Tone:** serious, grounded, survival-focused, hopeful
 - **Visual style:** modern stylized-realism or clean low-poly, readable mobile silhouettes — *never* pixel art. Primitives are fine for the prototype phase; target USDZ/RealityKit assets for production.
@@ -93,14 +93,15 @@ Known chapter arc (extend as needed, keep order):
 Full details in the root `CLAUDE.md`. The summaries below are what you need for most code tasks.
 
 ### Camera
-- Player-orbited rig (`ThirdPersonCameraRig`): yaw/pitch driven by the **right-side look pad**, pitched down, with a gentle auto-recenter behind the heading while running and not looking. Exposes `groundForward` / `groundRight` for camera-relative movement. Do NOT reintroduce tight auto-follow of the heading (it caused a feedback loop / moonwalking).
+- Player-orbited rig (`ThirdPersonCameraRig`): yaw/pitch driven by the **right-side look pad** only — no auto-follow / auto-recenter. Exposes `groundForward` / `groundRight` for camera-relative movement. Do NOT reintroduce auto-follow (it caused moonwalking and a feedback loop).
 
 ### Movement
-- Camera-relative left-stick input on the XZ plane; player eases to face travel. Velocity-driven physics body with smoothed acceleration and a capped facing-turn rate. Touch input is dead-zoned, curved, and low-passed. The right look pad orbits the camera (two-thumb controls).
+- **Camera-aligned model.** Camera-relative left-stick input on the XZ plane; the body **aligns to the camera's forward** — stick input never rotates the body, only the look pad does. Up = walk forward, down = backpedal (no spin), left/right = strafe. Touch input is dead-zoned, curved, and low-passed; velocity-targeted with smoothed accel/decel.
 
 ### Inventory
-- Simple, small fixed slots (8–12), expandable later
-- Holds: tools, weapons, medical items, survival supplies, mission items
+- Simple, small fixed slots (10), expandable later
+- Categories: tool, weapon, medical, supply, mission, **apparel**
+- Inventory + equipped items **persist across chapters**; per-chapter state resets on entry via `resetSessionForNewChapter`
 - **Not** weight-simulated, **not** economically balanced, **not** the focus of gameplay
 
 ### Crafting
@@ -110,7 +111,9 @@ Full details in the root `CLAUDE.md`. The summaries below are what you need for 
 
 ### Combat
 - Grounded, physical, tactical, fast
-- Hand-to-hand (punch combos, kick, block), improvised weapons (knife, stick), traps (tripwire, spike, ambush). Strikes should give feedback (hit flash, impact burst, haptics, camera kick).
+- **Melee:** jab → cross → kick combo, improvised weapons (knife/baton/stick). Strikes give feedback (white flash, spark burst, haptics, camera kick, audio thud). Held weapon visible in right hand.
+- **Ranged:** grounded firearms (pistol). Hitscan from camera's forward; **damage constant across range — no falloff** (real-firearm round). Finite magazine; **no reload system yet**.
+- **Traps:** tripwire, designer-placed and story-gated.
 - **No** magic, superpowers, sci-fi weapons, fantasy abilities
 
 ### Progression
