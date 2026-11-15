@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0836f7181b21e4917a56d1cf086344ba, type: 3}
+  m_Name: SliceArtSet
+  m_EditorClassIdentifier: Assembly-CSharp-Editor::EMPEscape.EditorTools.SliceArtSet
+  player: {fileID: 919132149155446097, guid: f828f52d4ee37492f86f3a12e2a12982, type: 3}
+  ray: {fileID: 919132149155446097, guid: 3069c2c443c6a44d9b4f0853c2a4bf20, type: 3}
+  characterAnimator: {fileID: 9100000, guid: d01e0afd6e4db41d58a64094e1711d29, type: 2}
+  characterYawOffset: 0
+  yourCar: {fileID: 919132149155446097, guid: 9ee4173c1fabc47f794f3fd9151a5cc6, type: 3}
+  parkedCars:
+  - {fileID: 919132149155446097, guid: a044879d18dee465c975c307bcc14e4a, type: 3}
+  - {fileID: 919132149155446097, guid: 02315ec6087d745869548c49655a4ad4, type: 3}
+  - {fileID: 919132149155446097, guid: f1061fc970d62490eac7941df6b3f010, type: 3}
+  - {fileID: 919132149155446097, guid: 6836df8df3a94406f82a5f4dc590389d, type: 3}
+  - {fileID: 919132149155446097, guid: 9f63b461708654419a95ca5a3f93e854, type: 3}
+  - {fileID: 919132149155446097, guid: 469245ac3fc2b4457a337eb8228ab9a1, type: 3}
+  - {fileID: 919132149155446097, guid: 3dd2af73618974b90bb0cec631d8ed45, type: 3}
+  van: {fileID: 919132149155446097, guid: 14289e4e67647418c8c090e3ca3afd73, type: 3}
+  truck: {fileID: 919132149155446097, guid: 36b947b1d56ac457b9b6a46a8ed352a8, type: 3}
+  vehicleYawOffset: 0
+  buildings:
+  - {fileID: 919132149155446097, guid: ed85440fcaa98450287d3c75e3d350b2, type: 3}
+  - {fileID: 919132149155446097, guid: 3cc01e8a4592f4aaeaff18adbaedfb69, type: 3}
+  - {fileID: 919132149155446097, guid: 3394c7d35dc89494992bca315b916069, type: 3}
+  - {fileID: 919132149155446097, guid: b0de603169b544406a69793afb868547, type: 3}
+  - {fileID: 919132149155446097, guid: ad1c0974f26844ca6b76fe49010a4af3, type: 3}
+  - {fileID: 919132149155446097, guid: 7d01e66151fb043ea9a124d65296c454, type: 3}
+  - {fileID: 919132149155446097, guid: 949aa965f2e264e53bd576f52a5cca8e, type: 3}
+  - {fileID: 919132149155446097, guid: 670f0290144684879b6b760b1e49e7fe, type: 3}
+  - {fileID: 919132149155446097, guid: 05e5b31885926437ea105fdbce6f3e52, type: 3}
+  - {fileID: 919132149155446097, guid: 79d61eeeffd4f44bfa76f7f0e24039a7, type: 3}
+  - {fileID: 919132149155446097, guid: 28a751a0a0f8c430a90882a5a28d9f4e, type: 3}
+  - {fileID: 919132149155446097, guid: 001401ec7d21b4bddbd5da362623a602, type: 3}
+  - {fileID: 919132149155446097, guid: 21ba668025d0546d09dc7d2982471b99, type: 3}
+  - {fileID: 919132149155446097, guid: 8f93d17bfad1b4fd4a1d09725239f6b1, type: 3}
+  - {fileID: 919132149155446097, guid: f185a995063554e0c97b1d53fad50a0d, type: 3}
+  - {fileID: 919132149155446097, guid: a04a57fcbd8cf45219fe2a7078f4d9b2, type: 3}
+  - {fileID: 919132149155446097, guid: 0de2ab4f77978411f90df76d7a390b36, type: 3}
+  - {fileID: 919132149155446097, guid: e0e4119f006264328b12f07abead4bbe, type: 3}
+  - {fileID: 919132149155446097, guid: e67cbb36a65af4a1e874dbef90bc21d7, type: 3}
+  - {fileID: 919132149155446097, guid: ec71a7102b9714b959009f023bc99259, type: 3}
+  - {fileID: 919132149155446097, guid: 1476b5439d65e47e6b359aed650369cb, type: 3}
+  streetProps: []
