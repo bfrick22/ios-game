@@ -24,9 +24,8 @@ MonoBehaviour:
   - {fileID: 919132149155446097, guid: 6836df8df3a94406f82a5f4dc590389d, type: 3}
   - {fileID: 919132149155446097, guid: 9f63b461708654419a95ca5a3f93e854, type: 3}
   - {fileID: 919132149155446097, guid: 469245ac3fc2b4457a337eb8228ab9a1, type: 3}
-  - {fileID: 919132149155446097, guid: 3dd2af73618974b90bb0cec631d8ed45, type: 3}
   van: {fileID: 919132149155446097, guid: 14289e4e67647418c8c090e3ca3afd73, type: 3}
-  truck: {fileID: 919132149155446097, guid: 36b947b1d56ac457b9b6a46a8ed352a8, type: 3}
+  truck: {fileID: 919132149155446097, guid: 6c1661dfd97fb44c9938031a1db52ba4, type: 3}
   vehicleYawOffset: 0
   buildings:
   - {fileID: 919132149155446097, guid: ed85440fcaa98450287d3c75e3d350b2, type: 3}
@@ -50,4 +49,7 @@ MonoBehaviour:
   - {fileID: 919132149155446097, guid: e67cbb36a65af4a1e874dbef90bc21d7, type: 3}
   - {fileID: 919132149155446097, guid: ec71a7102b9714b959009f023bc99259, type: 3}
   - {fileID: 919132149155446097, guid: 1476b5439d65e47e6b359aed650369cb, type: 3}
-  streetProps: []
+  streetProps:
+  - {fileID: 919132149155446097, guid: cec383d1ed40a4550a4f48a9c99adae0, type: 3}
+  - {fileID: 919132149155446097, guid: e59e1811f045442e3ad3c897961a18a9, type: 3}
+  - {fileID: 919132149155446097, guid: cd1c1177c9eb04afa9aec02f5577ac1a, type: 3}
