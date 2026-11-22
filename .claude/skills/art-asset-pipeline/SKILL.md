@@ -17,9 +17,10 @@ Give the owner the download steps; the code side is automatic.
 | Folder | What goes in | Import rule (ArtImportRules.cs, first import only) |
 |---|---|---|
 | `Characters/` | Mixamo-rigged characters, FBX for Unity, T-pose (the character download always includes skin) | Humanoid rig, avatar from model |
-| `Animations/` | Humanoid animation FBX: Mixamo (one clip per file, **without skin**) or a multi-clip library such as Quaternius UAL. File or clip names must contain idle / walk / talk (or conversation) / flinch (or hit, react) | Humanoid; single clips renamed to the file; clips with idle/walk/talk/run loop; root locked |
+| `Animations/` | Humanoid animation FBX: Mixamo (one clip per file, **without skin**) or a multi-clip library such as Quaternius UAL. File or clip names must contain idle / walk / talk (or conversation) / flinch (or hit, react) | Humanoid; single clips renamed to the file; clips with idle/walk/talk/run loop with Loop Pose; rotation and height baked, XZ root motion NOT baked (the game ignores root motion, so non-In-Place clips stay put) |
 | `Vehicles/` | Kenney Car Kit FBX files plus their `Textures/` folder | Unity defaults |
 | `City/` | Kenney City Kit FBX files plus `Textures/` | Unity defaults |
+| `Weapons/` | Optional knife / bat / pistol models (file name contains knife, bat, pistol or gun). Empty = simple shapes | Unity defaults |
 
 ## Owner's download steps
 1. **Kenney packs** (free, CC0) from kenney.nl. Use the files in each pack's FBX folder and keep the `Textures` folder next to them.
@@ -47,13 +48,16 @@ Characters go in `Characters/`, the library FBX in `Animations/`; clip names are
 ## Character animation
 - `CharacterAnimatorBuilder` makes `Art/EMPCharacter.controller`: Idle (default), Walk (Speed > 0.1), Talk (Talking bool), Flinch (trigger, from any state).
 - `CharacterActor` (on each character root, `actorName` = Ink speaker name) drives Speed from movement, sets Talking while that character's line is on screen, and fires triggers from Ink `# anim: Ray flinch`.
-- New one-shot action (e.g. `point`): add the clip to `Animations/`, add a role + trigger + state in `CharacterAnimatorBuilder`, rebuild the animator and scene, then use `# anim: Ray point`.
+- One-shots: Flinch (flinch/hit/react), Swing (swing/slash/stab/melee/punch/attack), Shoot (shoot/fire/pistol). Each gets a trigger and state only if a clip matches. The swing and shoot QTEs fire them on the Player automatically.
+- New one-shot action (e.g. `point`): add the clip to `Animations/`, add the role to `Roles` and `OneShots` in `CharacterAnimatorBuilder`, rebuild the animator and scene, then use `# anim: Ray point`.
+- Held weapons attach to the right-hand bone. If a prop sits at a bad angle: in Play mode tweak Grip Position / Rotation on the Player's WeaponHolder, then copy the values to Weapon Grip in `SliceArtSet` and rebuild.
 
 ## Problems and fixes
 | Problem | Fix |
 |---|---|
 | Characters T-pose | No idle clip found, or the animator wasn't rebuilt. Check `Art/Animations` names, run Build Character Animator, rebuild the scene |
-| Character slides instead of walking | Walk clip missing, or not downloaded **In Place** |
+| Character slides instead of walking | Walk clip missing |
+| Walk glitches backward / teleports at the end of each step cycle | The clip moves forward and its XZ root motion was baked into the pose, so the body drifts ahead and snaps back on loop. Run **EMP Escape > Reapply Animation Import Settings** (XZ not baked, Loop Pose on). Import rules now do this for new clips. Verify in the clip's `.fbx.meta`: `loopBlendPositionXZ: 0`, `keepOriginalPositionXZ: 0`, and `loopBlend: 1` for loops. If the menu wasn't run, agents with folder access can set those three fields directly; Unity reimports on focus |
 | Pink models | Materials not URP. Select them > Edit > Rendering > Materials > Convert Selected Built-in Materials to URP |
 | Untextured grey Kenney models | The pack's `Textures` folder wasn't copied next to the FBX files |
 | Vehicle sideways | Set `vehicleYawOffset` (90 or -90) in SliceArtSet, rebuild scene |

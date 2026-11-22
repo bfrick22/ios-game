@@ -27,6 +27,11 @@ MonoBehaviour:
   van: {fileID: 919132149155446097, guid: 14289e4e67647418c8c090e3ca3afd73, type: 3}
   truck: {fileID: 919132149155446097, guid: 6c1661dfd97fb44c9938031a1db52ba4, type: 3}
   vehicleYawOffset: 0
+  knife: {fileID: 0}
+  bat: {fileID: 0}
+  pistol: {fileID: 0}
+  weaponGripPosition: {x: 0, y: 0, z: 0}
+  weaponGripRotation: {x: 0, y: 0, z: 0}
   buildings:
   - {fileID: 919132149155446097, guid: ed85440fcaa98450287d3c75e3d350b2, type: 3}
   - {fileID: 919132149155446097, guid: 3cc01e8a4592f4aaeaff18adbaedfb69, type: 3}

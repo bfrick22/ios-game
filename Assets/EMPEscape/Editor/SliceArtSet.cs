@@ -26,6 +26,14 @@ namespace EMPEscape.EditorTools
         [Tooltip("Extra Y rotation if vehicle models point sideways or backwards.")]
         public float vehicleYawOffset;
 
+        [Header("Weapons (optional models in Art/Weapons; empty = simple shapes)")]
+        public GameObject knife;
+        public GameObject bat;
+        public GameObject pistol;
+        [Tooltip("Weapon offset in the right-hand bone's space. Tune on the Player's WeaponHolder in Play mode, then copy here.")]
+        public Vector3 weaponGripPosition;
+        public Vector3 weaponGripRotation;
+
         [Header("City backdrop (Kenney City Kit FBX in Art/City)")]
         public GameObject[] buildings = new GameObject[0];
         public GameObject[] streetProps = new GameObject[0];

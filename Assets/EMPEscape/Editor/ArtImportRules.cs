@@ -1,5 +1,6 @@
 using System.IO;
 using UnityEditor;
+using UnityEngine;
 
 namespace EMPEscape.EditorTools
 {
@@ -7,7 +8,12 @@ namespace EMPEscape.EditorTools
     /// Import defaults for EMP Escape art, applied the first time a file is imported (your later
     /// Inspector changes stick):
     ///   Art/Characters/*  -> Humanoid rig, avatar from the model
-    ///   Art/Animations/*  -> Humanoid rig; a single clip is named after its file; clips with idle/walk/talk/run in the name loop
+    ///   Art/Animations/*  -> Humanoid rig; a single clip is named after its file; clips with idle/walk/talk/run
+    ///                        in the name loop with Loop Pose on
+    /// Root motion: rotation and height are baked into the pose, but forward/sideways motion (XZ) is NOT.
+    /// It is pulled out to the root, which the game ignores (applyRootMotion is off), so a walk that wasn't
+    /// downloaded "In Place" still stays on the spot instead of drifting ahead and snapping back each loop.
+    /// Menu: EMP Escape > Reapply Animation Import Settings re-applies these to every file in Art/Animations.
     /// </summary>
     public class ArtImportRules : AssetPostprocessor
     {
@@ -28,21 +34,45 @@ namespace EMPEscape.EditorTools
         {
             if (!assetPath.StartsWith(AnimationsDir) || !assetImporter.importSettingsMissing) return;
             var importer = (ModelImporter)assetImporter;
-            var fileName = Path.GetFileNameWithoutExtension(assetPath);
-            var clips = importer.defaultClipAnimations;
+            importer.clipAnimations = ApplyClipRules(importer.defaultClipAnimations, assetPath);
+        }
+
+        /// <summary>Overwrites the clip settings of every file in Art/Animations with the rules above, then reimports.</summary>
+        [MenuItem("EMP Escape/Reapply Animation Import Settings")]
+        static void ReapplyToAnimations()
+        {
+            int count = 0;
+            foreach (var guid in AssetDatabase.FindAssets("t:Model", new[] { AnimationsDir.TrimEnd('/') }))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!(AssetImporter.GetAtPath(path) is ModelImporter importer)) continue;
+                var clips = importer.clipAnimations;
+                if (clips == null || clips.Length == 0) clips = importer.defaultClipAnimations;
+                importer.clipAnimations = ApplyClipRules(clips, path);
+                importer.SaveAndReimport();
+                count++;
+            }
+            Debug.Log($"[EMP Escape] Reapplied animation import settings to {count} file(s) in {AnimationsDir}.");
+        }
+
+        static ModelImporterClipAnimation[] ApplyClipRules(ModelImporterClipAnimation[] clips, string path)
+        {
+            var fileName = Path.GetFileNameWithoutExtension(path);
             for (int i = 0; i < clips.Length; i++)
             {
                 // One clip per file (Mixamo): name it after the file. Many clips per file (animation libraries): keep their names.
                 if (clips.Length == 1) clips[i].name = fileName;
-                clips[i].loopTime = ContainsAny(clips[i].name.ToLowerInvariant(), LoopingKeywords);
-                clips[i].lockRootRotation = true;
-                clips[i].lockRootHeightY = true;
-                clips[i].lockRootPositionXZ = true;
+                bool loop = ContainsAny(clips[i].name.ToLowerInvariant(), LoopingKeywords);
+                clips[i].loopTime = loop;
+                clips[i].loopPose = loop;              // blend the last frame into the first, so the seam doesn't pop
+                clips[i].lockRootRotation = true;      // bake turning into the pose
                 clips[i].keepOriginalOrientation = true;
+                clips[i].lockRootHeightY = true;       // bake height (bob) into the pose
                 clips[i].keepOriginalPositionY = true;
-                clips[i].keepOriginalPositionXZ = true;
+                clips[i].lockRootPositionXZ = false;   // forward drift goes to the root, which the game ignores
+                clips[i].keepOriginalPositionXZ = false; // measure that drift from the center of mass
             }
-            importer.clipAnimations = clips;
+            return clips;
         }
 
         bool IsCharacterOrAnimation() => assetPath.StartsWith(CharactersDir) || assetPath.StartsWith(AnimationsDir);

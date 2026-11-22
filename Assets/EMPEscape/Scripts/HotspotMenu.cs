@@ -80,6 +80,7 @@ namespace EMPEscape
             useButton.gameObject.SetActive(hotspot.Has(HotspotVerb.Use));
             talkButton.gameObject.SetActive(hotspot.Has(HotspotVerb.Talk));
             menu.gameObject.SetActive(true);
+            AudioDirector.Play("ui_tap", 0.5f);
         }
 
         public void Hide()

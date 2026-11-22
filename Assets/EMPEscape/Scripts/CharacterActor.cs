@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -19,11 +20,16 @@ namespace EMPEscape
         [Tooltip("Must match the speaker name used in Ink (\"Ray: ...\") and in # anim tags.")]
         public string actorName = "Actor";
         public float speedSmoothing = 10f;
+        [Tooltip("Play footstep sounds while walking (the scene builder turns this on for the player).")]
+        public bool footsteps;
+        public float strideLength = 0.75f;
 
         Animator animator;
         readonly HashSet<string> parameters = new HashSet<string>();
+        readonly HashSet<string> warned = new HashSet<string>();
         Vector3 lastPosition;
         float speed;
+        float stride;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetRegistry() => Actors.Clear();
@@ -58,6 +64,12 @@ namespace EMPEscape
             float raw = Time.deltaTime > 0f ? delta.magnitude / Time.deltaTime : 0f;
             speed = Mathf.Lerp(speed, raw, 1f - Mathf.Exp(-speedSmoothing * Time.deltaTime));
             if (Has("Speed")) animator.SetFloat(SpeedHash, speed);
+
+            if (!footsteps || speed < 0.4f) return;
+            stride += delta.magnitude;
+            if (stride < strideLength) return;
+            stride = 0f;
+            AudioDirector.PlayAt("step_" + UnityEngine.Random.Range(1, 5), transform.position, 0.45f, 0.07f);
         }
 
         public void SetTalking(bool talking)
@@ -65,14 +77,37 @@ namespace EMPEscape
             if (Has("Talking")) animator.SetBool(TalkingHash, talking);
         }
 
-        /// <summary>Fire a one-shot action trigger, e.g. "flinch" sets the Flinch trigger.</summary>
+        /// <summary>
+        /// Fire a one-shot action trigger, e.g. "flinch" sets the Flinch trigger. Without that clip a
+        /// flinch still shows as a quick wobble, so placeholders react to hits.
+        /// </summary>
         public void Play(string action)
         {
-            if (string.IsNullOrWhiteSpace(action) || animator == null) return;
+            if (string.IsNullOrWhiteSpace(action)) return;
             action = action.Trim();
             var trigger = char.ToUpperInvariant(action[0]) + action.Substring(1).ToLowerInvariant();
-            if (Has(trigger)) animator.SetTrigger(trigger);
-            else Debug.LogWarning($"[CharacterActor] {actorName} has no '{trigger}' animation. Add the clip and rebuild the animator.");
+            if (Has(trigger))
+            {
+                animator.SetTrigger(trigger);
+                return;
+            }
+            if (trigger == "Flinch") StartCoroutine(Wobble());
+            if (animator != null && warned.Add(trigger))
+                Debug.LogWarning($"[CharacterActor] {actorName} has no '{trigger}' animation. Add the clip and run Build Character Animator.");
+        }
+
+        IEnumerator Wobble()
+        {
+            Transform visual = null;
+            foreach (Transform child in transform)
+                if (child.name.StartsWith("Visual")) { visual = child; break; }
+            if (visual == null) yield break;
+
+            var rest = visual.localRotation;
+            var tilted = rest * Quaternion.Euler(-14f, 0f, 0f);
+            for (float t = 0f; t < 0.07f; t += Time.deltaTime) { visual.localRotation = Quaternion.Slerp(rest, tilted, t / 0.07f); yield return null; }
+            for (float t = 0f; t < 0.25f; t += Time.deltaTime) { visual.localRotation = Quaternion.Slerp(tilted, rest, t / 0.25f); yield return null; }
+            visual.localRotation = rest;
         }
 
         public void FaceTowards(Vector3 point)

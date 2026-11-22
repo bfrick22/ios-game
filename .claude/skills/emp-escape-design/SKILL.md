@@ -13,6 +13,12 @@ description: Design rules for EMP Escape, a Telltale-style, chapter-based, dialo
 - **Art:** Kenney CC0 kits with Mixamo-rigged characters (see art-asset-pipeline). Readable silhouettes, per-chapter color grade. Never pixel art.
 - `__previous__/` holds the retired RealityKit platformer. Reference only; its rules (side-scrolling, jumping, combat, inventory) no longer apply.
 
+## Premise
+The player is a techno-prepper. When the EMP hits, most tech dies, but their phone survives in a faraday bag
+(with a solar panel and a cold crypto wallet). The phone runs a simulated small local AI field guide with preset
+questions and answers; more data (packs) is found through the game by photographing manuals and the like.
+Phone functions: Field-AI, guide lookup, local Wi-Fi comms, camera, notes, flashlight. See the phone skill.
+
 ## Chapter arc (keep order)
 1. The Event
 2. The Neighborhood
@@ -25,8 +31,22 @@ description: Design rules for EMP Escape, a Telltale-style, chapter-based, dialo
 |---|---|
 | Explore | Small walkable scenes. Fixed cameras that cut between zones. Drag for a floating virtual stick (free direction, including back toward the camera); tap ground to walk there. Tap hotspots for Look / Use / Talk |
 | Talk | Up to 4 choices, often timed. The last choice is silence and is picked on timeout |
-| Action | Quick-time events (tap, mash, hold) replace combat. A failure is either death-and-retry or a different branch |
+| Action | Quick-time events replace real-time combat: tap, mash, hold, **shoot** (drag to aim, lift to fire at set targets, limited rounds) and **swing** (swipe in the arrow's direction; the held knife or bat changes the swipe). A failure is either death-and-retry or a different branch |
+| Phone | Opened from the HUD while exploring. Battery is a resource the solar panel refills. Comms chats are Ink conversations shown as messages |
+| Weapons | Knife, bat, pistol (more later). Held weapon is story state (Ink `weapon`); it changes which action a scene uses. No stats, durability, or upgrades |
 | Choose | 2–3 major choices per chapter set flags. Show "[Name] will remember that." Choice-stats screen at chapter end |
+
+## Decisions
+Choices the story marks with `# decision:` are saved across sessions and listed on the CHOICES screen. Later
+scenes (and later chapters) read them with Ink `decided("key")`. Telltale-style "what others chose" stats would
+need a server: not built.
+
+## Sound
+Environment first (wind, birds, distant shots, fire, footsteps, impacts, UI). Character voices come later.
+
+## Action sandbox
+`Sandbox.unity` (EMP Escape > Build Action Sandbox) is the test bed for every interaction type, not a level.
+New interaction types get a sandbox station first; real levels come later.
 
 ## Story structure: branch and bottleneck
 Choices change who survives, how characters treat the player, and how scenes play out. Every chapter
@@ -45,7 +65,7 @@ If a request for a new chapter is missing any element, ask for it before buildin
 
 ## Off-spec: push back before building
 - Free-roam or open-world maps
-- Real-time or stat-based combat, health bars, weapon stats
+- Real-time or stat-based combat, free aiming, health bars, weapon stats (weapons are QTE beats, not a combat system)
 - XP, levels, grinding, loot, currency, shops, economy
 - Crafting trees or material farming
 - Jumping, climbing, or platforming (retired with the old platformer design)

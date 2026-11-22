@@ -13,7 +13,7 @@ VAR ray_trust = 0
 VAR talked_to_ray = false
 
 === intro ===
-The engine died mid-sentence. So did the radio. So did every car on the off-ramp. # cam: intro
+The engine died mid-sentence. So did the radio. So did every car on the off-ramp. # cam: intro # ambience: amb_wind # distant: distant_crash
 Your phone is black. Your watch is black. Somewhere a car alarm should be screaming. Nothing is.
 -> END
 

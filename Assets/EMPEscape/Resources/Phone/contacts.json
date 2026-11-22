@@ -1,0 +1,12 @@
+{
+  "contacts": [
+    {
+      "id": "basecamp",
+      "name": "BASECAMP",
+      "network": "BASECAMP-MESH",
+      "flag": "net_basecamp",
+      "knot": "comms_basecamp",
+      "preview": "Solar relay, local only"
+    }
+  ]
+}

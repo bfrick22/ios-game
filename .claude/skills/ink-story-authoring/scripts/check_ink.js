@@ -11,8 +11,11 @@ let story;
 try { story = compiler.Compile(); }
 catch (e) { console.error('COMPILE FAILED:', e.message, compiler.errors); process.exit(1); }
 if (compiler.warnings.length) console.warn('Warnings:', compiler.warnings);
+story.allowExternalFunctionFallbacks = true; // the game binds decided(); the checker uses the ink fallback
 
-const knots = [...story.mainContentContainer.namedContent.keys()].filter(k => !k.startsWith('global'));
+const source = fs.readFileSync(file, 'utf8');
+const functions = new Set([...source.matchAll(/^\s*={2,}\s*function\s+(\w+)/gm)].map(m => m[1]));
+const knots = [...story.mainContentContainer.namedContent.keys()].filter(k => !k.startsWith('global') && !functions.has(k));
 for (const knot of knots) {
   try {
     story.ResetState();

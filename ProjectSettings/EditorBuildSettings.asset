@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/EMPEscape/Scenes/Sandbox.unity
+    guid: dfb0409331e684b5fb8977ba151e15fc
+  - enabled: 1
     path: Assets/EMPEscape/Scenes/Slice.unity
     guid: b02288a06a8a94231bf4bfc08d6b6fc1
   - enabled: 0

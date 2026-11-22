@@ -44,6 +44,48 @@ namespace EMPEscape
             }
         }
 
+        static Sprite ring;
+        static Sprite arrow;
+
+        /// <summary>Hollow circle: reticles and target markers.</summary>
+        public static Sprite RingSprite
+        {
+            get
+            {
+                if (ring == null)
+                    ring = Procedural(128, (x, y, c) => Mathf.Clamp01(4f - Mathf.Abs(Vector2.Distance(new Vector2(x, y), new Vector2(c, c)) - (c - 6f))));
+                return ring;
+            }
+        }
+
+        /// <summary>Arrow pointing right. Rotate the Image to point it elsewhere.</summary>
+        public static Sprite ArrowSprite
+        {
+            get
+            {
+                if (arrow == null)
+                    arrow = Procedural(128, (x, y, c) =>
+                    {
+                        float dy = Mathf.Abs(y - c);
+                        if (x >= 10f && x <= 72f && dy <= 13f) return 1f;                 // shaft
+                        if (x >= 64f && x <= 120f && dy <= (120f - x) * 0.85f) return 1f; // head
+                        return 0f;
+                    });
+                return arrow;
+            }
+        }
+
+        static Sprite Procedural(int size, System.Func<float, float, float, float> alpha)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            float center = (size - 1) / 2f;
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha(x, y, center)));
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        }
+
         public static Canvas CreateCanvas(string name, Transform parent)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -95,6 +137,63 @@ namespace EMPEscape
             button.colors = colors;
             label = Label("Label", background.transform, fontSize, TextAnchor.MiddleCenter, Color.white);
             label.rectTransform.Stretch(new Vector2(24f, 8f));
+            button.onClick.AddListener(() => AudioDirector.Play("ui_tap", 0.6f));
+            return button;
+        }
+
+        /// <summary>
+        /// A vertical scrolling list. Children added to <paramref name="content"/> stack top to bottom and size
+        /// themselves (Text wraps to the list's width).
+        /// </summary>
+        public static ScrollRect ScrollList(string name, Transform parent, float spacing, out RectTransform content)
+        {
+            var root = NewRect(name, parent);
+            var scroll = root.gameObject.AddComponent<ScrollRect>();
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 40f;
+
+            var viewport = NewRect("Viewport", root).Stretch();
+            viewport.gameObject.AddComponent<RectMask2D>();
+            var catcher = viewport.gameObject.AddComponent<Image>(); // lets drags anywhere in the list scroll it
+            catcher.color = new Color(0f, 0f, 0f, 0f);
+
+            content = NewRect("Content", viewport);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.sizeDelta = Vector2.zero;
+            content.anchoredPosition = Vector2.zero;
+            var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = spacing;
+            layout.padding = new RectOffset(8, 8, 8, 8);
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            scroll.viewport = viewport;
+            scroll.content = content;
+            return scroll;
+        }
+
+        /// <summary>A wrapping text block for lists (rich text on: color, b, i, size tags).</summary>
+        public static Text Paragraph(string name, Transform parent, int size, Color color, string text)
+        {
+            var label = Label(name, parent, size, TextAnchor.UpperLeft, color);
+            label.supportRichText = true;
+            label.text = text;
+            return label;
+        }
+
+        /// <summary>A button sized by its list (layout height), left-aligned label.</summary>
+        public static Button ListButton(string name, Transform parent, int fontSize, float height, out Text label)
+        {
+            var button = MakeButton(name, parent, fontSize, out label);
+            label.alignment = TextAnchor.MiddleLeft;
+            label.supportRichText = true;
+            button.gameObject.AddComponent<LayoutElement>().preferredHeight = height;
             return button;
         }
 

@@ -9,7 +9,9 @@ namespace EMPEscape.EditorTools
     /// <summary>
     /// Menu: EMP Escape > Build Character Animator.
     /// Builds Assets/EMPEscape/Art/EMPCharacter.controller from the clips in Art/Animations, matched by file name:
-    /// idle (required), walk, talk, flinch (also matches "hit"/"react"), by file or clip name, so multi-clip libraries work too. Parameters: Speed (float), Talking (bool), Flinch (trigger).
+    /// idle (required), walk, talk, and one-shots flinch, swing, shoot. Clips are matched by file or clip name
+    /// (see Roles), so multi-clip libraries work too. Parameters: Speed (float), Talking (bool), and one trigger
+    /// per one-shot that has a clip (Flinch, Swing, Shoot); CharacterActor.Play("swing") fires them.
     /// Re-run after adding clips. It overwrites the controller.
     /// </summary>
     public static class CharacterAnimatorBuilder
@@ -23,7 +25,12 @@ namespace EMPEscape.EditorTools
             ("walk", new[] { "walk" }),
             ("talk", new[] { "talk", "conversation", "chat" }),
             ("flinch", new[] { "flinch", "hit", "react" }),
+            ("swing", new[] { "swing", "slash", "stab", "melee", "punch", "attack" }),
+            ("shoot", new[] { "shoot", "shooting", "fire", "pistol" }),
         };
+
+        // Played from any state, then back to Idle. Trigger and state are the role capitalized.
+        static readonly string[] OneShots = { "flinch", "swing", "shoot" };
 
         [MenuItem("EMP Escape/Build Character Animator")]
         static void BuildFromMenu()
@@ -32,7 +39,7 @@ namespace EMPEscape.EditorTools
             if (controller == null)
             {
                 EditorUtility.DisplayDialog("EMP Escape",
-                    "No idle animation found in " + AnimationsFolder + ".\n\nPut your Mixamo FBX files there with idle, walk, talk and flinch in their file names, then run this again.",
+                    "No idle animation found in " + AnimationsFolder + ".\n\nPut your Mixamo FBX files there with idle, walk, talk, flinch, swing and shoot in their file names, then run this again.",
                     "OK");
                 return;
             }
@@ -49,7 +56,6 @@ namespace EMPEscape.EditorTools
             var controller = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
             controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
             controller.AddParameter("Talking", AnimatorControllerParameterType.Bool);
-            controller.AddParameter("Flinch", AnimatorControllerParameterType.Trigger);
 
             var machine = controller.layers[0].stateMachine;
             var idle = machine.AddState("Idle");
@@ -73,16 +79,19 @@ namespace EMPEscape.EditorTools
                 Link(talk, idle, 0.15f).AddCondition(AnimatorConditionMode.Greater, 0.1f, "Speed");
             }
 
-            if (clips.TryGetValue("flinch", out var flinchClip))
+            foreach (var role in OneShots)
             {
-                var flinch = machine.AddState("Flinch");
-                flinch.motion = flinchClip;
-                var enter = machine.AddAnyStateTransition(flinch);
+                if (!clips.TryGetValue(role, out var clip)) continue;
+                var name = char.ToUpperInvariant(role[0]) + role.Substring(1);
+                controller.AddParameter(name, AnimatorControllerParameterType.Trigger);
+                var state = machine.AddState(name);
+                state.motion = clip;
+                var enter = machine.AddAnyStateTransition(state);
                 enter.hasExitTime = false;
-                enter.duration = 0.08f;
+                enter.duration = 0.06f;
                 enter.canTransitionToSelf = false;
-                enter.AddCondition(AnimatorConditionMode.If, 0f, "Flinch");
-                var back = flinch.AddTransition(idle);
+                enter.AddCondition(AnimatorConditionMode.If, 0f, name);
+                var back = state.AddTransition(idle);
                 back.hasExitTime = true;
                 back.exitTime = 0.9f;
                 back.duration = 0.2f;

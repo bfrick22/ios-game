@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace EMPEscape
 {
     /// <summary>Subtitles, timed dialogue choices, "will remember that" toasts, and the end screen.</summary>
-    public class DialogueUI : MonoBehaviour
+    public class DialogueUI : MonoBehaviour, IStoryPresenter
     {
         const int MaxChoices = 4;
 
@@ -33,6 +33,10 @@ namespace EMPEscape
 
         RectTransform endScreen;
         Text endTitle;
+
+        RectTransform deathScreen;
+        Text deathTitle;
+        Action onRetry;
 
         public void Build(RectTransform parent)
         {
@@ -104,6 +108,23 @@ namespace EMPEscape
             restartLabel.text = "Restart";
             restart.GetComponent<RectTransform>().Center(new Vector2(360f, 96f)).anchoredPosition = new Vector2(0f, -90f);
             restart.onClick.AddListener(() => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
+
+            // Death screen. Retry replays the knot from where it started.
+            var death = UIFactory.Panel("DeathScreen", parent, new Color(0.25f, 0f, 0f, 0.88f));
+            deathScreen = death.rectTransform.Stretch();
+            deathTitle = UIFactory.Label("Title", deathScreen, 64, TextAnchor.MiddleCenter, Color.white);
+            deathTitle.rectTransform.Center(new Vector2(1400f, 160f)).anchoredPosition = new Vector2(0f, 80f);
+            var retry = UIFactory.MakeButton("Retry", deathScreen, 38, out var retryLabel);
+            retryLabel.text = "Retry";
+            retry.GetComponent<RectTransform>().Center(new Vector2(360f, 96f)).anchoredPosition = new Vector2(0f, -90f);
+            retry.onClick.AddListener(() =>
+            {
+                deathScreen.gameObject.SetActive(false);
+                var action = onRetry;
+                onRetry = null;
+                action?.Invoke();
+            });
+            deathScreen.gameObject.SetActive(false);
 
             subtitle.gameObject.SetActive(false);
             choicePanel.gameObject.SetActive(false);
@@ -181,6 +202,7 @@ namespace EMPEscape
         {
             if (rememberRoutine != null) StopCoroutine(rememberRoutine);
             rememberRoutine = StartCoroutine(Remember(text));
+            AudioDirector.Play("remember_chime", 0.7f);
         }
 
         IEnumerator Remember(string text)
@@ -191,6 +213,14 @@ namespace EMPEscape
             yield return new WaitForSeconds(2.5f);
             for (float t = 0f; t < 0.6f; t += Time.deltaTime) { rememberGroup.alpha = 1f - t / 0.6f; yield return null; }
             rememberGroup.alpha = 0f;
+        }
+
+        public void ShowDeath(string message, Action retry)
+        {
+            deathTitle.text = message;
+            onRetry = retry;
+            deathScreen.gameObject.SetActive(true);
+            AudioDirector.Play("death_sting");
         }
 
         public void ShowEndScreen(string title)
